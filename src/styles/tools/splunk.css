@@ -1,0 +1,47 @@
+.splunk-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.splunk-content {
+  flex-grow: 1;
+}
+
+#splunkEditor .CodeMirror {
+  height: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+/* Splunk syntax highlighting */
+#splunkEditor .cm-key {
+  color: #666666;
+  font-weight: bold;
+}
+#splunkEditor .cm-hardcoded {
+  color: #008000;
+}
+#splunkEditor .cm-context,
+#splunkEditor .cm-vtl-value {
+  color: #05a;
+}
+#splunkEditor .cm-variable-error {
+  color: #ff0000;
+}
+#splunkEditor .cm-error {
+  background-color: #ffcccc;
+}
+#splunkEditor .cm-delimiter {
+  color: #000000;
+  font-weight: bold;
+}
+#splunkEditor .cm-string {
+  color: #800080;
+}
+#splunkEditor .cm-vtl-format {
+  color: #ff6600;
+}
+
+#splunkEditor .cm-vtl-parameter {
+  color: #008080;
+}
