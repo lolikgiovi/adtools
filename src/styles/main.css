@@ -1,0 +1,249 @@
+:root {
+  --side-width: 160px;
+  --header-height: 60px;
+  --primary-color: #2c3e50;
+  --primary-light: #34495e;
+  --secondary-color: #95a5a6;
+  --accent-color: #e74c3c;
+  --background-color: #ecf0f1;
+  --container-bg-color: #ffffff;
+  --text-color: #333333;
+  --border-color: #bdc3c7;
+  --input-height: 36px;
+  --header-bg-color: #2c3e50;
+  --header-text-color: #ecf0f1;
+  --nav-button-hover-bg: #34495e;
+  --nav-button-active-bg: #e74c3c;
+  --transition-speed: 0.3s;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  height: var(--header-height);
+  background-color: var(--header-bg-color);
+  color: var(--header-text-color);
+  padding: 0 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+header h1 {
+  font-size: 1.5rem;
+  letter-spacing: 1px;
+}
+
+header h1 a,
+header h1 a:visited,
+header h1 a:hover,
+header h1 a:active {
+  color: var(--header-text-color);
+  text-decoration: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height));
+  overflow: hidden;
+}
+
+#content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Enable momentum scrolling on iOS */
+  padding: 0 1rem 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--secondary-color) var(--background-color);
+}
+
+#content::-webkit-scrollbar {
+  width: 8px;
+}
+
+#content::-webkit-scrollbar-track {
+  background: var(--background-color);
+}
+
+#content::-webkit-scrollbar-thumb {
+  background-color: var(--secondary-color);
+  border-radius: 4px;
+  border: 2px solid var(--background-color);
+}
+
+.tool-container {
+  background-color: var(--container-bg-color);
+  padding: 1.25rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 1rem;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-bottom: 0.625rem;
+  align-items: center;
+}
+
+#sectionText {
+  margin-bottom: 0.625rem;
+}
+
+button {
+  height: var(--input-height);
+  line-height: var(--input-height);
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--secondary-color);
+  color: white;
+  cursor: pointer;
+  transition: background-color var(--transition-speed),
+    opacity var(--transition-speed);
+}
+
+button:hover {
+  background-color: var(--accent-color);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  height: var(--input-height);
+  line-height: var(--input-height);
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--container-bg-color);
+}
+
+textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 0.5rem;
+  margin-top: 0.3125rem;
+  margin-bottom: 0.625rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-family: "Courier New", monospace;
+  resize: vertical;
+}
+
+#main-nav {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+#main-nav button {
+  background-color: transparent;
+  border: none;
+  color: var(--header-text-color);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color var(--transition-speed),
+    color var(--transition-speed);
+}
+
+#main-nav button:hover {
+  background-color: var(--nav-button-hover-bg);
+}
+
+#main-nav button.active {
+  background-color: var(--nav-button-active-bg);
+}
+
+#burger-menu {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--header-text-color);
+  cursor: pointer;
+}
+
+@media (max-width: 1092px) {
+  header {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 1rem;
+  }
+
+  header h1 {
+    margin-right: auto;
+  }
+
+  #burger-menu {
+    display: block;
+  }
+
+  #main-nav {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    padding: 0.5rem 0;
+  }
+
+  #main-nav.show {
+    display: flex;
+  }
+
+  #main-nav button {
+    width: 100%;
+    text-align: left;
+  }
+}
+
+html,
+body {
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+
+#app {
+  overscroll-behavior-x: none;
+}
+
+.CodeMirror {
+  margin: 0px;
+}
+
+.header-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-block; /* Ensures the link takes up the full space of the text */
+  position: relative; /* Creates a new stacking context */
+  z-index: 1; /* Ensures the link is above other elements */
+}
+
+.header-link:hover {
+  text-decoration: underline;
+}

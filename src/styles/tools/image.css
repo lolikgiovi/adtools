@@ -1,0 +1,44 @@
+.image-preview {
+  margin-top: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-items: baseline;
+}
+
+.image-preview > div {
+  margin-right: 20px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.download-button {
+  padding: 0;
+  margin: 0;
+  height: 0;
+  border: none;
+  color: var(--accent-color);
+  background-color: transparent;
+  cursor: pointer;
+}
+
+.download-button:hover {
+  text-decoration: underline;
+}
+
+#base64Output {
+  display: inline-flex;
+  flex-wrap: wrap;
+}
+
+#base64Output a {
+  display: flex;
+  padding: 5px 10px;
+  background-color: #f0f0f0;
+  margin-right: 10px;
+  margin-bottom: 10px;
+  border-radius: 3px;
+  text-decoration: none;
+  color: #333;
+}
