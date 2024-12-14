@@ -44,10 +44,6 @@ export async function initHtmlTemplate(container, updateHeaderTitle) {
           </div>
         </div>
         <div class="preview-container button-group">
-          <div class="preview-controls">
-            <button id="loadImagesButton">Reload Images</button>
-            <select id="baseUrl"></select>
-          </div>
           <div class="iphone-simulator">
             <iframe id="htmlPreview"></iframe>
           </div>
