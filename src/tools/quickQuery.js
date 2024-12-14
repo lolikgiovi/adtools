@@ -606,7 +606,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         return `Invalid data type "${dataType}" for column "${columnName}"`;
       }
 
-      if (!["yes", "no", "pk"].includes(nullable.toLowerCase())) {
+      if (!["yes", "no", "pk", "y", "n"].includes(nullable.toLowerCase())) {
         return `Invalid nullable value "${nullable}" for column "${columnName}". Must be 'Yes', 'No', or contain 'PK'`;
       }
 

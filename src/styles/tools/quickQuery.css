@@ -56,12 +56,6 @@
 
 #spreadsheet-data {
   overflow-x: auto;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* Internet Explorer and Edge */
-}
-
-#spreadsheet-data::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, and Opera */
 }
 
 .handsontable .wtHolder::-webkit-scrollbar {
