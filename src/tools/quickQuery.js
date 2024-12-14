@@ -457,6 +457,17 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const schemaData = schemaHot.getData().filter((row) => row[0]);
       const inputData = dataHot.getData();
 
+      console.log("Schema data:", schemaData);
+      console.log("Input data:", inputData);
+
+      const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ""));
+      const hasInputData = inputData.some(row => row.some(cell => cell !== null && cell !== ""));
+
+      if (!hasSchemaData || !hasInputData) {
+        showError("Not enough data. Please input at least one row with content in both schema and data spreadsheets.");
+        return;
+      }
+
       // Get field names from schema and data input
       const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
       const dataFieldNames = inputData[0].map((field) =>
@@ -506,14 +517,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const actualData = inputData
         .slice(1)
         .filter((row) => row.some((cell) => cell !== null && cell !== ""));
-
-      // Add this check for minimum required data
-      if (schemaData.length < 1 || actualData.length < 1) {
-        showError(
-          "Not enough data. Please input at least one row in both schema and data spreadsheets."
-        );
-        return;
-      }
 
       const query = generateQuickQuery(
         tableName,
@@ -840,15 +843,15 @@ export function initQuickQuery(container, updateHeaderTitle) {
         value.toLowerCase() === "null" ||
         value === undefined ||
         value === "") &&
-      nullable.toLowerCase() === "yes"
+      nullable.toLowerCase() === "yes" 
     ) {
       return "NULL";
     }
 
-    // Handle sequential config ID
+    // Handle sequential config ID or _id with number data type
     if (
-      lowerColumnName === "config_id" &&
-      dataType.toUpperCase() === "NUMBER"
+      (lowerColumnName === "config_id" && dataType.toUpperCase() === "NUMBER") || 
+      (lowerColumnName.endsWith("_id") && dataType.toUpperCase() === "NUMBER")
     ) {
       return `(SELECT MAX(${lowerColumnName})+1 FROM ${tableName})`;
     }
