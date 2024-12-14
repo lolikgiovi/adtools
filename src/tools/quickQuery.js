@@ -311,6 +311,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
     document
       .getElementById("addFieldNames")
       .addEventListener("click", addFieldNamesFromSchema);
+    document
+      .getElementById("tableNameInput")
+      .addEventListener("input", adjustTableNameInputWidth);
+    document
+      .getElementById("tableNameInput")
+      .addEventListener("change", adjustTableNameInputWidth);
   }
 
   function toggleGuide() {
@@ -1049,8 +1055,22 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function adjustTableNameInputWidth() {
     const input = document.getElementById("tableNameInput");
-    input.style.width = "auto";
-    input.style.width = input.scrollWidth + 5 + "px";
+    
+    // Create temporary span to measure text width
+    const span = document.createElement("span");
+    span.style.visibility = "hidden";
+    span.style.position = "absolute";
+    span.style.whiteSpace = "pre";
+    span.style.font = window.getComputedStyle(input).font;
+    span.textContent = input.value || input.placeholder;
+    
+    document.body.appendChild(span);
+    const width = span.getBoundingClientRect().width;
+    document.body.removeChild(span);
+    
+    // Add padding and border to the width
+    const finalWidth = Math.max(150, width + 20); // 20px for padding and border
+    input.style.width = finalWidth + "px";
   }
 
   adjustTableNameInputWidth();

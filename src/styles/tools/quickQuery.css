@@ -165,6 +165,8 @@
 #tableNameInput {
   width: auto;
   min-width: 150px; /* Provide a minimum width */
+  padding: 4px 8px;
+  box-sizing: border-box;
 }
 
 #queryTypeSelect {
