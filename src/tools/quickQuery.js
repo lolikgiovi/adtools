@@ -7,7 +7,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         <div class="content-a">
           <div class="quick-query-left-panel">
             <div class="button-group quick-query-left-controls">
-              <input type="text" id="tableNameInput" placeholder="Enter table name" value="schema_name.table_name">
+              <input type="text" id="tableNameInput" placeholder="schema_name.table_name" value="schema_name.table_name">
               <select id="queryTypeSelect">
                 <option value="merge">MERGE INTO</option>
                 <option value="insert">INSERT</option>
@@ -43,6 +43,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
               <button id="copySQL">Copy SQL</button>
               <button id="downloadSQL">Download SQL</button>
             </div>
+            <div id="warningMessages"></div>
             <div id="errorMessages"></div>
             <div id="queryEditor" class="quick-query-content-area"></div>
           </div>
@@ -496,8 +497,13 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Handle empty table name
     if (!tableName) {
-      showError("Please enter the table name.");
+      showError("Please fill in schema_name.table_name.");
       return;
+    }
+
+    //if table name format not "schema_name.table_name", show error
+    if (!tableName.includes(".")) {
+      showWarning("Warning: Table name format should be 'schema_name.table_name'.");
     }
 
     try {
@@ -506,17 +512,16 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
       const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ""));
       const hasInputData = inputData.some(row => row.some(cell => cell !== null && cell !== ""));
-      
-      // Adjust schema data if it's a DBeaver schema format
-      if (schemaData[0][0] === "Column Name") {
-        schemaData = adjustDbeaverSchema(schemaData);
-      }
 
       if (!hasSchemaData || !hasInputData) {
         showError("Not enough data. Please input at least one row with content in both schema and data spreadsheets.");
         return;
       }
 
+      // Adjust schema data if it's a DBeaver schema format
+      if (schemaData[0][0] === "Column Name") {
+        schemaData = adjustDbeaverSchema(schemaData);
+      }
 
       // Get field names from schema and data input
       const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
@@ -987,10 +992,20 @@ export function initQuickQuery(container, updateHeaderTitle) {
     errorMessagesDiv.style.display = "block";
   }
 
+  function showWarning(message) {
+    const warningMessagesDiv = document.getElementById("warningMessages");
+    warningMessagesDiv.innerHTML = message;
+    warningMessagesDiv.style.display = "block";
+    warningMessagesDiv.style.color = "orange";
+  }
+
   function clearError() {
     const errorMessagesDiv = document.getElementById("errorMessages");
+    const warningMessagesDiv = document.getElementById("warningMessages");
     errorMessagesDiv.textContent = "";
+    warningMessagesDiv.textContent = "";
     errorMessagesDiv.style.display = "none";
+    warningMessagesDiv.style.display = "none";
   }
 
   function formatCLOB(value) {
