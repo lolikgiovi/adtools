@@ -125,7 +125,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
           type: "dropdown",
           source: ["Yes", "No", "PK"],
           validator: function (value, callback) {
-            callback(["Yes", "No", "PK"].includes(value));
+            callback(["Yes", "No", "PK", "yes", "no", "pk", "Yes", "No", "Pk", "Y", "N", "y", "n"].includes(value));
           },
           renderer: function (
             instance,
@@ -197,6 +197,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
       minCols: 1,
       contextMenu: true,
       manualColumnResize: true,
+      stretchH: 'none',
+      className: 'hide-scrollbar', //custom css class to hide scroll
       cells: function (row, col) {
         const cellProperties = {};
         if (row === 0) {
@@ -270,7 +272,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
     setTimeout(() => editor.refresh(), 0);
   }
 
-  // Add this function to refresh the editor's height
   function refreshEditorHeight() {
     editor.refresh();
   }
