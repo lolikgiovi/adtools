@@ -61,10 +61,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
   container.innerHTML = html;
 
   clearError();
+  adjustTableNameInputWidth();
 
   let editor;
-  let schemaHot;
-  let dataHot;
+  let schemaTable;
+  let dataTable;
 
   // Load Handsontable script and CSS dynamically
   loadHandsontable().then(() => {
@@ -93,14 +94,14 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function initializeHandsontable() {
     const schemaContainer = document.getElementById("spreadsheet-schema");
     const data = [["", "", "", ""]];
-    schemaHot = new Handsontable(schemaContainer, {
+    schemaTable = new Handsontable(schemaContainer, {
       data: data,
       colHeaders: [
         "Field Name",
         "Data Type",
         "Nullable/PK",
         "Default",
-        "Column Id",
+        "Field Order",
         "Comments",
       ],
       columns: [
@@ -142,7 +143,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         },
         {}, // Default
         {
-          // Column Id
+          // Field Order
           type: "numeric",
           validator: function (value, callback) {
             callback(
@@ -188,7 +189,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function initializeDataHandsontable() {
     const dataContainer = document.getElementById("spreadsheet-data");
-    dataHot = new Handsontable(dataContainer, {
+    dataTable = new Handsontable(dataContainer, {
       data: [[], []],
       colHeaders: true,
       rowHeaders: true,
@@ -197,7 +198,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       minCols: 1,
       contextMenu: true,
       manualColumnResize: true,
-      stretchH: 'none',
+      stretchH: 'none', // allow horizontal scroll
       className: 'hide-scrollbar', //custom css class to hide scroll
       cells: function (row, col) {
         const cellProperties = {};
@@ -213,8 +214,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
           ) {
             Handsontable.renderers.TextRenderer.apply(this, arguments);
             td.style.fontWeight = "bold";
-            td.style.textAlign = "center"; // Center-align the text
-            td.className += " center-aligned"; // Add a class for additional styling if needed
+            td.style.textAlign = "center"; 
           };
         }
         return cellProperties;
@@ -223,21 +223,21 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function updateDataSpreadsheet() {
-    const schemaData = schemaHot.getData().filter((row) => row[0]);
+    const schemaData = schemaTable.getData().filter((row) => row[0]);
     const columnCount = schemaData.length;
 
-    // Generate alphabetical column headers
+    // Generate alphabetical field headers
     const columnHeaders = Array.from({ length: columnCount }, (_, i) =>
       String.fromCharCode(65 + i)
     );
 
-    dataHot.updateSettings({
+    dataTable.updateSettings({
       colHeaders: columnHeaders,
       columns: Array(columnCount).fill({ type: "text" }),
       minCols: columnCount,
     });
 
-    const currentData = dataHot.getData();
+    const currentData = dataTable.getData();
 
     // If there's no data or less than two rows, create two empty rows
     if (currentData.length < 2) {
@@ -245,7 +245,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         Array(columnCount).fill(null),
         Array(columnCount).fill(null),
       ];
-      dataHot.loadData(newData);
+      dataTable.loadData(newData);
     } else {
       // Ensure existing data has the correct number of columns
       const newData = currentData.map((row) => {
@@ -253,7 +253,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
           .slice(0, columnCount)
           .concat(Array(Math.max(0, columnCount - row.length)).fill(null));
       });
-      dataHot.loadData(newData);
+      dataTable.loadData(newData);
     }
   }
 
@@ -270,10 +270,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
     console.log("Editor initialized");
     // Refresh the editor to adjust its height
     setTimeout(() => editor.refresh(), 0);
-  }
-
-  function refreshEditorHeight() {
-    editor.refresh();
   }
 
   function setupEventListeners() {
@@ -351,11 +347,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
       ["UPDATED_BY", "VARCHAR2(36 BYTE)", "No", "", "10"],
     ];
 
-    schemaHot.loadData(sampleData);
+    schemaTable.loadData(sampleData);
   }
 
   function handleSimulationFillData() {
-    dataHot.loadData([
+    dataTable.loadData([
       [
         "TABLE_ID",
         "DESC_ID",
@@ -410,22 +406,22 @@ export function initQuickQuery(container, updateHeaderTitle) {
     document.getElementById("tableNameInput").value = "";
 
     // Reset the spreadsheet
-    if (schemaHot) {
-      schemaHot.updateSettings({
+    if (schemaTable) {
+      schemaTable.updateSettings({
         data: [["", "", "", ""]],
         colHeaders: [
-          "Column Name",
+          "Field Name",
           "Data Type",
           "Nullable/PK",
           "Default",
-          "Column Id",
+          "Field Order",
           "Comments",
         ],
       });
     }
 
-    if (dataHot) {
-      dataHot.updateSettings({
+    if (dataTable) {
+      dataTable.updateSettings({
         data: [[], []],
         colHeaders: true,
         minCols: 1,
@@ -444,32 +440,87 @@ export function initQuickQuery(container, updateHeaderTitle) {
     document.getElementById("queryTypeSelect").value = "merge";
   }
 
+  function adjustDbeaverSchema(schemaData) {
+    // Check if it's a DBeaver schema format
+    // console.log("Schema data before shift:", JSON.stringify(schemaData));
+    console.log("Adjusting schema data");
+    
+    // Remove the header row
+    const dataWithoutHeader = schemaData.slice(1);
+    
+    // Transform the data
+    const adjustedSchemaData = dataWithoutHeader.map(row => {
+        // Original DBeaver format:
+        // [0]: Column Name
+        // [1]: Column Type
+        // [2]: Type Name
+        // [3]: Column Size
+        // [4]: Nullable
+        // [5]: Default Value
+        // [6]: Comments
+        
+        // Transform nullable from TRUE/FALSE to No/Yes
+        const nullable = row[4] === "TRUE" ? "No" : "Yes";
+
+        // Transform [NULL] to empty string
+        const defaultValue = row[5] === "[NULL]" ? "" : row[5];
+        
+        return [
+            row[0],                    // [0] Field Name (same as Column Name)
+            row[2],                    // [1] Data Type (use Type Name instead of Column Type)
+            nullable,                  // [2] Nullable/PK
+            defaultValue,             // [3] Default Value
+            row[1] || "",             // [4] Field Order (use Column Type as order)
+            row[6] || ""              // [5] Comments
+        ];
+    });
+    
+    // console.log("Adjusted schema data:", JSON.stringify(adjustedSchemaData));
+
+    // Update the schemaTable with the new data
+    if (schemaTable && typeof schemaTable.loadData === 'function') {
+        try {
+            // Clear existing data and load new data
+            schemaTable.loadData(adjustedSchemaData);
+            updateDataSpreadsheet();
+        } catch (error) {
+            console.error("Error updating schema table:", error);
+        }
+    }
+
+    return adjustedSchemaData;
+}
   async function handleGenerateQuery() {
     const tableName = document.getElementById("tableNameInput").value.trim();
     const queryType = document.getElementById("queryTypeSelect").value;
 
+    // Handle empty table name
     if (!tableName) {
-      showError("Please enter a table name.");
+      showError("Please enter the table name.");
       return;
     }
 
     try {
-      const schemaData = schemaHot.getData().filter((row) => row[0]);
-      const inputData = dataHot.getData();
-
-      console.log("Schema data:", schemaData);
-      console.log("Input data:", inputData);
+      const schemaData = schemaTable.getData().filter((row) => row[0]); // filter out empty rows
+      const inputData = dataTable.getData();
 
       const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ""));
       const hasInputData = inputData.some(row => row.some(cell => cell !== null && cell !== ""));
+      
+      // Adjust schema data if it's a DBeaver schema format
+      if (schemaData[0][0] === "Column Name") {
+        schemaData = adjustDbeaverSchema(schemaData);
+      }
 
       if (!hasSchemaData || !hasInputData) {
         showError("Not enough data. Please input at least one row with content in both schema and data spreadsheets.");
         return;
       }
 
+
       // Get field names from schema and data input
       const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
+      console.log("Schema field names:", schemaFieldNames);
       const dataFieldNames = inputData[0].map((field) =>
         field ? field.toLowerCase() : ""
       );
@@ -486,12 +537,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
       if (missingInSchema.length > 0 || missingInData.length > 0) {
         let errorMessage = `Mismatch in fields. `;
         if (missingInSchema.length > 0) {
-          errorMessage += `Fields in data input but not in schema: ${missingInSchema.join(
+          errorMessage += `<br>Fields in data input but not in schema: ${missingInSchema.join(
             ", "
           )}. `;
         }
         if (missingInData.length > 0) {
-          errorMessage += `Fields in schema but not in data input: ${missingInData.join(
+          errorMessage += `<br>Fields in schema but not in data input: ${missingInData.join(
             ", "
           )}. `;
         }
@@ -499,13 +550,13 @@ export function initQuickQuery(container, updateHeaderTitle) {
         return;
       }
 
-      // Check for empty column names in data input
+      // Check for empty field names in data input
       const emptyColumnIndex = dataFieldNames.findIndex(
         (field) => field === ""
       );
       if (emptyColumnIndex !== -1) {
         showError(
-          `Empty column name found in data input at column ${
+          `Empty field name found in data input at field ${
             emptyColumnIndex + 1
           }.`
         );
@@ -527,7 +578,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       );
       editor.setValue(query);
       clearError();
-      refreshEditorHeight();
+      // refreshEditorHeight();
     } catch (error) {
       showError(`Error generating query: ${error.message}`);
     }
@@ -549,7 +600,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     // Validate data
     const validationError = validateData(schemaData, fieldNames, inputData);
     if (validationError) {
-      throw new Error(`Validation error: ${validationError}`);
+      throw new Error(`${validationError}`);
     }
 
     // Find primary keys
@@ -606,11 +657,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
       if (specialColumns.includes(columnName.toLowerCase())) continue;
 
       if (!isValidDataType(dataType)) {
-        return `Invalid data type "${dataType}" for column "${columnName}"`;
+        return `Invalid data type "${dataType}" for field "${columnName}"`;
       }
 
       if (!["yes", "no", "pk", "y", "n"].includes(nullable.toLowerCase())) {
-        return `Invalid nullable value "${nullable}" for column "${columnName}". Must be 'Yes', 'No', or contain 'PK'`;
+        return `Invalid nullable value "${nullable}" for field "${columnName}". Must be 'Yes', 'No', or contain 'PK'`;
       }
 
       for (let row of inputData) {
@@ -619,10 +670,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
           nullable.toLowerCase() === "no" &&
           (value === null || value === undefined || value === "")
         ) {
-          return `NULL value not allowed for non-nullable column "${columnName}"`;
+          return `NULL value not allowed for non-nullable field "${columnName}"`;
         }
         if (!isValidValueForDataType(value, dataType)) {
-          return `Invalid value "${value}" for data type "${dataType}" in column "${columnName}"`;
+          return `Invalid value "${value}" for data type "${dataType}" in field "${columnName}"`;
         }
       }
     }
@@ -656,16 +707,16 @@ export function initQuickQuery(container, updateHeaderTitle) {
       if (parameterKeyField) return [parameterKeyField[0]];
     }
 
-    // Look for fields with "PK" or "pk" in the Nullable column
+    // Look for fields with "PK" or "pk" in the Nullable field
     const pkFields = data
       .filter((field) => field[2].toLowerCase().includes("pk"))
       .map((field) => field[0]);
 
     if (pkFields.length > 0) return pkFields;
 
-    // If no primary keys found, use the first column
+    // If no primary keys found, use the first field
     console.log(
-      "No explicit primary key found. Using first column:",
+      "No explicit primary key found. Using first field:",
       data[0][0]
     );
     return [data[0][0]];
@@ -879,7 +930,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       nullable.toLowerCase() === "no"
     ) {
       throw new Error(
-        `NULL value not allowed for non-nullable column in table ${tableName}`
+        `NULL value not allowed for non-nullable field in table ${tableName}`
       );
     }
 
@@ -932,7 +983,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function showError(message) {
     const errorMessagesDiv = document.getElementById("errorMessages");
-    errorMessagesDiv.textContent = message;
+    errorMessagesDiv.innerHTML = message;
     errorMessagesDiv.style.display = "block";
   }
 
@@ -1077,14 +1128,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
     input.style.width = finalWidth + "px";
   }
 
-  adjustTableNameInputWidth();
-
   function addFieldNamesFromSchema() {
-    const schemaData = schemaHot.getData().filter((row) => row[0]);
+    const schemaData = schemaTable.getData().filter((row) => row[0]);
     const fieldNames = schemaData.map((row) => row[0]);
 
-    // Get the current data from dataHot
-    const currentData = dataHot.getData();
+    // Get the current data from dataTable
+    const currentData = dataTable.getData();
 
     // Set the first row to the field names
     if (currentData.length > 0) {
@@ -1098,7 +1147,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       currentData.push(Array(fieldNames.length).fill(null));
     }
 
-    // Update the dataHot instance with the new data
-    dataHot.loadData(currentData);
+    // Update the dataTable instance with the new data
+    dataTable.loadData(currentData);
   }
 }
