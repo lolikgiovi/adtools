@@ -1,15 +1,12 @@
-.quick-query-controls .button-group {
-  margin-bottom: 0px;
-}
-
 .quick-query-tool-container {
   display: flex;
   flex-direction: column;
-  /* min-height: 100%;  */
-  min-height: calc(
-    100vh - 100px
-  );
+  min-height: calc(100vh - 100px);
   overflow: visible;
+}
+
+.quick-query-controls .button-group {
+  margin-bottom: 0px;
 }
 
 .quick-query-content {
@@ -24,10 +21,11 @@
   display: flex;
   flex: 1 0 auto; /* Allow it to grow but not shrink */
   min-height: 0;
+  position: relative;
 }
 
 .quick-query-left-panel {
-  flex: 1;
+  flex: 0 1 50%;
   padding: 0 10px 10px 10px;
   border-right: 1px solid var(--border-color);
   overflow-y: auto;
@@ -36,11 +34,17 @@
 }
 
 .quick-query-right-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 50%;
   flex: 1;
   padding: 0 10px 10px 10px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
+  max-height: 100%;
 }
 
 .content-b {
@@ -51,13 +55,14 @@
 
 #spreadsheet-schema {
   flex: 1;
-  overflow: visible; /* Keep this as visible */
+  overflow: visible; 
 }
 
 #spreadsheet-data {
   overflow-x: auto;
 }
 
+/* Hide scrollbar in spreadsheet-data */
 .handsontable .wtHolder::-webkit-scrollbar {
   display: none;
 }
@@ -68,7 +73,9 @@
 }
 
 #queryEditor {
-  height: 500px; 
+  /* height: 500px;  */
+  flex: 1;
+  min-height: 500px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -78,11 +85,12 @@
   height: 100% !important;
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  flex: 1;
 }
 
-/* .quick-query-content-area .CodeMirror-scroll {
+.quick-query-content-area .CodeMirror-scroll {
   min-height: unset !important;
-} */
+}
 
 /* Handsontable overrides */
 .handsontable {
