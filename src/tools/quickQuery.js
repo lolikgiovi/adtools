@@ -551,8 +551,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
             console.error("Error updating schema table:", error);
         }
     }
-
-    return adjustedSchemaData;
 }
   async function handleGenerateQuery() {
     const tableName = document.getElementById("tableNameInput").value.trim();
@@ -564,7 +562,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       return;
     }
 
-    //if table name format not "schema_name.table_name", show error
+    //if table name format not "schema_name.table_name", show warning
     if (!tableName.includes(".")) {
       showWarning("Warning: Table name format should be 'schema_name.table_name'.");
     }
@@ -574,19 +572,21 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const inputData = dataTable.getData();
 
       const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ""));
-      const hasInputData = inputData.some(row => row.some(cell => cell !== null && cell !== ""));
       const hasFieldNames = inputData[0] && inputData[0].some(cell => cell !== null && cell !== "");
       const hasFirstDataRow = inputData[1] && inputData[1].some(cell => cell !== null && cell !== "");
+      
+      // Adjust schema data if it's a DBeaver schema format
+      if (hasSchemaData && schemaData[0][0] === "Column Name") {
+        adjustDbeaverSchema(schemaData);
+        return;
+      }
 
+      // empty data handling
       if (!hasSchemaData || !hasFieldNames || !hasFirstDataRow) {
         showError("Not enough data. Please fill in the schema and data.");
         return;
       }
 
-      // Adjust schema data if it's a DBeaver schema format
-      if (schemaData[0][0] === "Column Name") {
-        schemaData = adjustDbeaverSchema(schemaData);
-      }
 
       // Get field names from schema and data input
       const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
