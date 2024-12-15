@@ -575,8 +575,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
       const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ""));
       const hasInputData = inputData.some(row => row.some(cell => cell !== null && cell !== ""));
+      const hasFieldNames = inputData[0] && inputData[0].some(cell => cell !== null && cell !== "");
+      const hasFirstDataRow = inputData[1] && inputData[1].some(cell => cell !== null && cell !== "");
 
-      if (!hasSchemaData || !hasInputData) {
+      if (!hasSchemaData || !hasFieldNames || !hasFirstDataRow) {
         showError("Not enough data. Please fill in the schema and data.");
         return;
       }
@@ -724,7 +726,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       if (specialColumns.includes(columnName.toLowerCase())) continue;
 
       if (!isValidDataType(dataType)) {
-        return `Invalid data type "${dataType}" for field "${columnName}"`;
+        return `<br>Invalid data type "${dataType}" for field "${columnName}" in Schema Table (See left panel)`;
       }
 
       if (!["yes", "no", "pk", "y", "n"].includes(nullable.toLowerCase())) {
@@ -733,12 +735,18 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
       for (let row of inputData) {
         const value = row[i];
+        // Null checking
         if (
           nullable.toLowerCase() === "no" &&
           (value === null || value === undefined || value === "")
         ) {
           return `NULL value not allowed for non-nullable field "${columnName}"`;
         }
+        // allow _id field with number data type to pass data type checking
+        if (columnName.toLowerCase().endsWith("_id") && dataType.toUpperCase() === "NUMBER") {
+          continue;
+        }
+        // Data type checking
         if (!isValidValueForDataType(value, dataType)) {
           return `Invalid value "${value}" for data type "${dataType}" in field "${columnName}"`;
         }
@@ -822,7 +830,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function generateInsertQuery(tableName, schemaData, fieldNames, rowData) {
-    let query = `INSERT INTO ${tableName} (${fieldNames.join(
+    let query = `INSERT INTO ${tableName} (${fieldNames.map(formatFieldName).join(
       ", "
     )}) \nVALUES (`;
     const values = fieldNames.map((fieldName, index) => {
@@ -860,11 +868,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
           schemaRow[2],
           tableName,
           fieldName
-        )} AS ${fieldName}`;
+        )} AS ${formatFieldName(fieldName)}`;
       })
       .join(",");
     query += `\nFROM DUAL) src\nON (${primaryKeys
-      .map((pk) => `tgt.${pk.toUpperCase()} = src.${pk.toUpperCase()}`)
+      .map((pk) => `tgt.${formatFieldName(pk)} = src.${formatFieldName(pk)}`)
       .join(" AND ")})\n`;
     query += `WHEN MATCHED THEN UPDATE SET\n`;
     query += fieldNames
@@ -873,11 +881,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
           !primaryKeys.map((pk) => pk.toLowerCase()).includes(fieldName) &&
           !["created_time", "created_by"].includes(fieldName)
       )
-      .map((fieldName) => `  tgt.${fieldName} = src.${fieldName}`)
+      .map((fieldName) => `  tgt.${formatFieldName(fieldName)} = src.${formatFieldName(fieldName)}`)
       .join(",\n");
-    query += `\nWHEN NOT MATCHED THEN INSERT (${fieldNames.join(", ")})\n`;
+      query += `\nWHEN NOT MATCHED THEN INSERT (${fieldNames.map(formatFieldName).join(", ")})\n`;
     query += `VALUES (${fieldNames
-      .map((fieldName) => `src.${fieldName}`)
+      .map((fieldName) => `src.${formatFieldName(fieldName)}`)
       .join(", ")});`;
     return query;
   }
@@ -918,7 +926,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
                 formatValue(value, schemaRow[1], "Yes", tableName, pk)
               )
               .join(", ");
-            return `${pk.toUpperCase()} IN (${formattedValues})`;
+            return `${formatFieldName(pk)} IN (${formattedValues})`;
           }
           return null;
         })
@@ -1226,5 +1234,33 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Update the dataTable instance with the new data
     dataTable.loadData(currentData);
+  }
+
+  function isOracleReservedWord(word) {
+    const reservedWords = new Set([
+      'access', 'add', 'all', 'alter', 'and', 'any', 'as', 'asc', 
+      'audit', 'between', 'by', 'char', 'check', 'cluster', 'column', 
+      'comment', 'compress', 'connect', 'create', 'current', 'date', 
+      'decimal', 'default', 'delete', 'desc', 'distinct', 'drop', 
+      'else', 'exclusive', 'exists', 'file', 'float', 'for', 'from', 
+      'grant', 'group', 'having', 'identified', 'immediate', 'in', 
+      'increment', 'index', 'initial', 'insert', 'integer', 'intersect', 
+      'into', 'is', 'level', 'like', 'lock', 'long', 'maxextents', 
+      'minus', 'mlslabel', 'mode', 'modify', 'noaudit', 'nocompress', 
+      'not', 'nowait', 'null', 'number', 'of', 'offline', 'on', 
+      'online', 'option', 'or', 'order', 'pctfree', 'prior', 
+      'privileges', 'public', 'raw', 'rename', 'resource', 'revoke', 
+      'row', 'rowid', 'rownum', 'rows', 'select', 'session', 'set', 
+      'share', 'size', 'smallint', 'start', 'successful', 'synonym', 
+      'sysdate', 'table', 'then', 'to', 'trigger', 'uid', 'union', 
+      'unique', 'update', 'user', 'validate', 'values', 'varchar', 
+      'varchar2', 'view', 'whenever', 'where', 'with', 'sequence', 
+      'type', 'package', 'body'
+    ]);
+    return reservedWords.has(word.toLowerCase());
+  }
+  
+  function formatFieldName(fieldName) {
+    return isOracleReservedWord(fieldName) ? `"${fieldName.toLowerCase()}"` : fieldName;
   }
 }
