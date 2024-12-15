@@ -6,14 +6,18 @@ export function initQuickQuery(container, updateHeaderTitle) {
       <div class="quick-query-content">
         <div class="content-a">
           <div class="quick-query-left-panel">
-            <div class="button-group quick-query-left-controls">
-              <input type="text" id="tableNameInput" placeholder="schema_name.table_name" value="schema_name.table_name">
+            <div class="button-group">
               <select id="queryTypeSelect">
                 <option value="merge">MERGE INTO</option>
-                <option value="insert">INSERT</option>
+                <option value="insert">INSERT INTO</option>
               </select>
-              <button id="generateQuery">Generate</button>
+              <input type="text" id="tableNameInput" placeholder="schema_name.table_name" value="schema_name.table_name">
+              </div>
+              <div class="button-group quick-query-left-controls">
+              <button id="addNewSchemaRow">Add row</button>
+              <button id="removeLastSchemaRow">Remove last row</button>
               <button id="clearAll">Clear</button>
+              <button id="generateQuery">Generate Query</button>
             </div>
             <div id="spreadsheet-schema"></div>
             <div id="guideContainer">
@@ -49,10 +53,14 @@ export function initQuickQuery(container, updateHeaderTitle) {
           </div>
         </div>
         <div class="content-b">
-          <div class="button-group quick-query-left-controls">
+          <div class="button-group">
             <h3>Data Input</h3>
             <p>Note: First row of data must be field names.</p>
-            <button id="addFieldNames">Click here to add field names from your schema above</button>
+            <div class="button-group simulate-buttons">
+              <button id="addFieldNames">Add field names from schema</button>
+              <button id="addDataRow">Add Row</button>
+              <button id="removeDataRow">Remove Last Row</button>
+            </div>
           </div>
           <div id="spreadsheet-data"></div>
         </div>
@@ -70,7 +78,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   // Load Handsontable script and CSS dynamically
   loadHandsontable().then(() => {
-    initializeHandsontable();
+    initializeSchemaTable();
     initializeEditor();
     setupEventListeners();
   });
@@ -92,7 +100,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     });
   }
 
-  function initializeHandsontable() {
+  function initializeSchemaTable() {
     const schemaContainer = document.getElementById("spreadsheet-schema");
     const data = [["", "", "", ""]];
     schemaTable = new Handsontable(schemaContainer, {
@@ -169,6 +177,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       height: "auto",
       licenseKey: "non-commercial-and-evaluation",
       minCols: 6,
+      minRows: 1,
       contextMenu: true,
       mergeCells: true,
       manualColumnResize: true,
@@ -185,10 +194,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
       },
     });
 
-    initializeDataHandsontable();
+    initializeDataTable();
   }
 
-  function initializeDataHandsontable() {
+  function initializeDataTable() {
     const dataContainer = document.getElementById("spreadsheet-data");
     dataTable = new Handsontable(dataContainer, {
       data: [[], []],
@@ -315,6 +324,60 @@ export function initQuickQuery(container, updateHeaderTitle) {
     document
       .getElementById("tableNameInput")
       .addEventListener("change", adjustTableNameInputWidth);
+    document
+      .getElementById("addDataRow")
+      .addEventListener("click", handleAddDataRow);
+    document
+      .getElementById("removeDataRow")
+      .addEventListener("click", handleRemoveDataRow);
+    document
+      .getElementById("addNewSchemaRow")
+      .addEventListener("click", handleAddNewSchemaRow);
+    document
+      .getElementById("removeLastSchemaRow")
+      .addEventListener("click", handleRemoveLastSchemaRow);
+  }
+
+  function handleAddDataRow() {
+    // Get current data
+    const currentData = dataTable.getData();
+    
+    // Get number of columns from schema
+    const schemaData = schemaTable.getData().filter(row => row[0]);
+    const columnCount = schemaData.length;
+    
+    // Create new empty row
+    const newRow = Array(columnCount).fill(null);
+    
+    // Add new row to current data
+    const newData = [...currentData, newRow];
+    
+    // Load the new data into the table
+    dataTable.loadData(newData);
+  }
+
+  function handleRemoveDataRow() {
+    // Get current data
+    const currentData = dataTable.getData();
+    
+    // Remove the last row
+    const newData = currentData.slice(0, -1);
+    
+    // Load the new data into the table
+    dataTable.loadData(newData);
+  }
+
+  function handleAddNewSchemaRow() {
+    const currentData = schemaTable.getData();
+    const newRow = Array(6).fill(null);
+    const newData = [...currentData, newRow];
+    schemaTable.loadData(newData);
+  }
+
+  function handleRemoveLastSchemaRow() {
+    const currentData = schemaTable.getData();
+    const newData = currentData.slice(0, -1);
+    schemaTable.loadData(newData);
   }
 
   function toggleGuide() {
@@ -514,7 +577,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const hasInputData = inputData.some(row => row.some(cell => cell !== null && cell !== ""));
 
       if (!hasSchemaData || !hasInputData) {
-        showError("Not enough data. Please input at least one row with content in both schema and data spreadsheets.");
+        showError("Not enough data. Please fill in the schema and data.");
         return;
       }
 
@@ -583,7 +646,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       );
       editor.setValue(query);
       clearError();
-      // refreshEditorHeight();
     } catch (error) {
       showError(`Error generating query: ${error.message}`);
     }

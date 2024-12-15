@@ -20,7 +20,7 @@
 .content-a {
   display: flex;
   flex: 1 0 auto; /* Allow it to grow but not shrink */
-  min-height: 0;
+  min-height: 550px;
   position: relative;
 }
 
@@ -75,7 +75,7 @@
 #queryEditor {
   /* height: 500px;  */
   flex: 1;
-  min-height: 500px;
+  min-height: 400px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -182,9 +182,19 @@
 
 #tableNameInput {
   width: auto;
-  min-width: 150px; /* Provide a minimum width */
+  min-width: 0;
   padding: 4px 8px;
   box-sizing: border-box;
+}
+
+/* Target Chrome's autocomplete dropdown */
+input:-webkit-autofill {
+  width: 500px !important; /* Adjust value as needed */
+}
+
+/* Target the autocomplete suggestions box */
+input:-webkit-autofill-selected {
+  width: 500px !important; /* Adjust value as needed */
 }
 
 #queryTypeSelect {
@@ -196,7 +206,7 @@
   margin-bottom: 10px;
 }
 
-#addFieldNames {
+/* #addFieldNames {
   padding: 0;
   margin: 0;
   border: none;
@@ -210,9 +220,8 @@
 
 #addFieldNames:hover {
   color: rgb(1, 139, 214);
-}
+} */
 
-/* Add this new rule */
 .center-aligned {
   text-align: center !important;
 }
