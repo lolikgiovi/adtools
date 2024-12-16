@@ -135,7 +135,23 @@ export function initQuickQuery(container, updateHeaderTitle) {
           type: "dropdown",
           source: ["Yes", "No", "PK"],
           validator: function (value, callback) {
-            callback(["Yes", "No", "PK", "yes", "no", "pk", "Yes", "No", "Pk", "Y", "N", "y", "n"].includes(value));
+            callback(
+              [
+                "Yes",
+                "No",
+                "PK",
+                "yes",
+                "no",
+                "pk",
+                "Yes",
+                "No",
+                "Pk",
+                "Y",
+                "N",
+                "y",
+                "n",
+              ].includes(value)
+            );
           },
           renderer: function (
             instance,
@@ -208,8 +224,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
       minCols: 1,
       contextMenu: true,
       manualColumnResize: true,
-      stretchH: 'none', // allow horizontal scroll
-      className: 'hide-scrollbar', //custom css class to hide scroll
+      stretchH: "none", // allow horizontal scroll
+      className: "hide-scrollbar", //custom css class to hide scroll
       cells: function (row, col) {
         const cellProperties = {};
         if (row === 0) {
@@ -224,7 +240,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
           ) {
             Handsontable.renderers.TextRenderer.apply(this, arguments);
             td.style.fontWeight = "bold";
-            td.style.textAlign = "center"; 
+            td.style.textAlign = "center";
           };
         }
         return cellProperties;
@@ -341,17 +357,17 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function handleAddDataRow() {
     // Get current data
     const currentData = dataTable.getData();
-    
+
     // Get number of columns from schema
-    const schemaData = schemaTable.getData().filter(row => row[0]);
+    const schemaData = schemaTable.getData().filter((row) => row[0]);
     const columnCount = schemaData.length;
-    
+
     // Create new empty row
     const newRow = Array(columnCount).fill(null);
-    
+
     // Add new row to current data
     const newData = [...currentData, newRow];
-    
+
     // Load the new data into the table
     dataTable.loadData(newData);
   }
@@ -359,10 +375,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function handleRemoveDataRow() {
     // Get current data
     const currentData = dataTable.getData();
-    
+
     // Remove the last row
     const newData = currentData.slice(0, -1);
-    
+
     // Load the new data into the table
     dataTable.loadData(newData);
   }
@@ -508,50 +524,50 @@ export function initQuickQuery(container, updateHeaderTitle) {
     // Check if it's a DBeaver schema format
     // console.log("Schema data before shift:", JSON.stringify(schemaData));
     console.log("Adjusting schema data");
-    
+
     // Remove the header row
     const dataWithoutHeader = schemaData.slice(1);
-    
-    // Transform the data
-    const adjustedSchemaData = dataWithoutHeader.map(row => {
-        // Original DBeaver format:
-        // [0]: Column Name
-        // [1]: Column Type
-        // [2]: Type Name
-        // [3]: Column Size
-        // [4]: Nullable
-        // [5]: Default Value
-        // [6]: Comments
-        
-        // Transform nullable from TRUE/FALSE to No/Yes
-        const nullable = row[4] === "TRUE" ? "No" : "Yes";
 
-        // Transform [NULL] to empty string
-        const defaultValue = row[5] === "[NULL]" ? "" : row[5];
-        
-        return [
-            row[0],                    // [0] Field Name (same as Column Name)
-            row[2],                    // [1] Data Type (use Type Name instead of Column Type)
-            nullable,                  // [2] Nullable/PK
-            defaultValue,             // [3] Default Value
-            row[1] || "",             // [4] Field Order (use Column Type as order)
-            row[6] || ""              // [5] Comments
-        ];
+    // Transform the data
+    const adjustedSchemaData = dataWithoutHeader.map((row) => {
+      // Original DBeaver format:
+      // [0]: Column Name
+      // [1]: Column Type
+      // [2]: Type Name
+      // [3]: Column Size
+      // [4]: Nullable
+      // [5]: Default Value
+      // [6]: Comments
+
+      // Transform nullable from TRUE/FALSE to No/Yes
+      const nullable = String(row[4]).toLowerCase() === "true" ? "No" : "Yes";
+
+      // Transform [NULL] to empty string
+      const defaultValue = row[5] === "[NULL]" ? "" : row[5];
+
+      return [
+        row[0], // [0] Field Name (same as Column Name)
+        row[2], // [1] Data Type (use Type Name instead of Column Type)
+        nullable, // [2] Nullable/PK
+        defaultValue, // [3] Default Value
+        row[1] || "", // [4] Field Order (use Column Type as order)
+        row[6] || "", // [5] Comments
+      ];
     });
-    
+
     // console.log("Adjusted schema data:", JSON.stringify(adjustedSchemaData));
 
     // Update the schemaTable with the new data
-    if (schemaTable && typeof schemaTable.loadData === 'function') {
-        try {
-            // Clear existing data and load new data
-            schemaTable.loadData(adjustedSchemaData);
-            updateDataSpreadsheet();
-        } catch (error) {
-            console.error("Error updating schema table:", error);
-        }
+    if (schemaTable && typeof schemaTable.loadData === "function") {
+      try {
+        // Clear existing data and load new data
+        schemaTable.loadData(adjustedSchemaData);
+        updateDataSpreadsheet();
+      } catch (error) {
+        console.error("Error updating schema table:", error);
+      }
     }
-}
+  }
   async function handleGenerateQuery() {
     const tableName = document.getElementById("tableNameInput").value.trim();
     const queryType = document.getElementById("queryTypeSelect").value;
@@ -564,17 +580,25 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     //if table name format not "schema_name.table_name", show warning
     if (!tableName.includes(".")) {
-      showWarning("Warning: Table name format should be 'schema_name.table_name'.");
+      showWarning(
+        "Warning: Table name format should be 'schema_name.table_name'."
+      );
     }
 
     try {
       const schemaData = schemaTable.getData().filter((row) => row[0]); // filter out empty rows
       const inputData = dataTable.getData();
 
-      const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ""));
-      const hasFieldNames = inputData[0] && inputData[0].some(cell => cell !== null && cell !== "");
-      const hasFirstDataRow = inputData[1] && inputData[1].some(cell => cell !== null && cell !== "");
-      
+      const hasSchemaData = schemaData.some((row) =>
+        row.some((cell) => cell !== null && cell !== "")
+      );
+      const hasFieldNames =
+        inputData[0] &&
+        inputData[0].some((cell) => cell !== null && cell !== "");
+      const hasFirstDataRow =
+        inputData[1] &&
+        inputData[1].some((cell) => cell !== null && cell !== "");
+
       // Adjust schema data if it's a DBeaver schema format
       if (hasSchemaData && schemaData[0][0] === "Column Name") {
         adjustDbeaverSchema(schemaData);
@@ -586,7 +610,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
         showError("Not enough data. Please fill in the schema and data.");
         return;
       }
-
 
       // Get field names from schema and data input
       const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
@@ -743,7 +766,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
           return `NULL value not allowed for non-nullable field "${columnName}"`;
         }
         // allow _id field with number data type to pass data type checking
-        if (columnName.toLowerCase().endsWith("_id") && dataType.toUpperCase() === "NUMBER") {
+        if (
+          columnName.toLowerCase().endsWith("_id") &&
+          dataType.toUpperCase() === "NUMBER"
+        ) {
           continue;
         }
         // Data type checking
@@ -830,9 +856,9 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function generateInsertQuery(tableName, schemaData, fieldNames, rowData) {
-    let query = `INSERT INTO ${tableName} (${fieldNames.map(formatFieldName).join(
-      ", "
-    )}) \nVALUES (`;
+    let query = `INSERT INTO ${tableName} (${fieldNames
+      .map(formatFieldName)
+      .join(", ")}) \nVALUES (`;
     const values = fieldNames.map((fieldName, index) => {
       const schemaRow = schemaData.find(
         (row) => row[0].toLowerCase() === fieldName
@@ -881,9 +907,16 @@ export function initQuickQuery(container, updateHeaderTitle) {
           !primaryKeys.map((pk) => pk.toLowerCase()).includes(fieldName) &&
           !["created_time", "created_by"].includes(fieldName)
       )
-      .map((fieldName) => `  tgt.${formatFieldName(fieldName)} = src.${formatFieldName(fieldName)}`)
+      .map(
+        (fieldName) =>
+          `  tgt.${formatFieldName(fieldName)} = src.${formatFieldName(
+            fieldName
+          )}`
+      )
       .join(",\n");
-      query += `\nWHEN NOT MATCHED THEN INSERT (${fieldNames.map(formatFieldName).join(", ")})\n`;
+    query += `\nWHEN NOT MATCHED THEN INSERT (${fieldNames
+      .map(formatFieldName)
+      .join(", ")})\n`;
     query += `VALUES (${fieldNames
       .map((fieldName) => `src.${formatFieldName(fieldName)}`)
       .join(", ")});`;
@@ -959,7 +992,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
       if (lowerColumnName.endsWith("_time")) {
         return "SYSDATE";
       } else {
-        return "'SYSTEM'";
+        if (value === null || value === undefined || value.trim() === "") {
+          return "'SYSTEM'";
+        }
+        return `'${value.replace(/'/g, "''")}'`; // Return the actual value if provided
       }
     }
 
@@ -969,14 +1005,15 @@ export function initQuickQuery(container, updateHeaderTitle) {
         value.toLowerCase() === "null" ||
         value === undefined ||
         value === "") &&
-      nullable.toLowerCase() === "yes" 
+      nullable.toLowerCase() === "yes"
     ) {
       return "NULL";
     }
 
     // Handle sequential config ID or _id with number data type
     if (
-      (lowerColumnName === "config_id" && dataType.toUpperCase() === "NUMBER") || 
+      (lowerColumnName === "config_id" &&
+        dataType.toUpperCase() === "NUMBER") ||
       (lowerColumnName.endsWith("_id") && dataType.toUpperCase() === "NUMBER")
     ) {
       return `(SELECT MAX(${lowerColumnName})+1 FROM ${tableName})`;
@@ -1195,7 +1232,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function adjustTableNameInputWidth() {
     const input = document.getElementById("tableNameInput");
-    
+
     // Create temporary span to measure text width
     const span = document.createElement("span");
     span.style.visibility = "hidden";
@@ -1203,11 +1240,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
     span.style.whiteSpace = "pre";
     span.style.font = window.getComputedStyle(input).font;
     span.textContent = input.value || input.placeholder;
-    
+
     document.body.appendChild(span);
     const width = span.getBoundingClientRect().width;
     document.body.removeChild(span);
-    
+
     // Add padding and border to the width
     const finalWidth = Math.max(150, width + 20); // 20px for padding and border
     input.style.width = finalWidth + "px";
@@ -1238,29 +1275,126 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function isOracleReservedWord(word) {
     const reservedWords = new Set([
-      'access', 'add', 'all', 'alter', 'and', 'any', 'as', 'asc', 
-      'audit', 'between', 'by', 'char', 'check', 'cluster', 'column', 
-      'comment', 'compress', 'connect', 'create', 'current', 'date', 
-      'decimal', 'default', 'delete', 'desc', 'distinct', 'drop', 
-      'else', 'exclusive', 'exists', 'file', 'float', 'for', 'from', 
-      'grant', 'group', 'having', 'identified', 'immediate', 'in', 
-      'increment', 'index', 'initial', 'insert', 'integer', 'intersect', 
-      'into', 'is', 'level', 'like', 'lock', 'long', 'maxextents', 
-      'minus', 'mlslabel', 'mode', 'modify', 'noaudit', 'nocompress', 
-      'not', 'nowait', 'null', 'number', 'of', 'offline', 'on', 
-      'online', 'option', 'or', 'order', 'pctfree', 'prior', 
-      'privileges', 'public', 'raw', 'rename', 'resource', 'revoke', 
-      'row', 'rowid', 'rownum', 'rows', 'select', 'session', 'set', 
-      'share', 'size', 'smallint', 'start', 'successful', 'synonym', 
-      'sysdate', 'table', 'then', 'to', 'trigger', 'uid', 'union', 
-      'unique', 'update', 'user', 'validate', 'values', 'varchar', 
-      'varchar2', 'view', 'whenever', 'where', 'with', 'sequence', 
-      'type', 'package', 'body'
+      "access",
+      "add",
+      "all",
+      "alter",
+      "and",
+      "any",
+      "as",
+      "asc",
+      "audit",
+      "between",
+      "by",
+      "char",
+      "check",
+      "cluster",
+      "column",
+      "comment",
+      "compress",
+      "connect",
+      "create",
+      "current",
+      "date",
+      "decimal",
+      "default",
+      "delete",
+      "desc",
+      "distinct",
+      "drop",
+      "else",
+      "exclusive",
+      "exists",
+      "file",
+      "float",
+      "for",
+      "from",
+      "grant",
+      "group",
+      "having",
+      "identified",
+      "immediate",
+      "in",
+      "increment",
+      "index",
+      "initial",
+      "insert",
+      "integer",
+      "intersect",
+      "into",
+      "is",
+      "level",
+      "like",
+      "lock",
+      "long",
+      "maxextents",
+      "minus",
+      "mlslabel",
+      "mode",
+      "modify",
+      "noaudit",
+      "nocompress",
+      "not",
+      "nowait",
+      "null",
+      "number",
+      "of",
+      "offline",
+      "on",
+      "online",
+      "option",
+      "or",
+      "order",
+      "pctfree",
+      "prior",
+      "privileges",
+      "public",
+      "raw",
+      "rename",
+      "resource",
+      "revoke",
+      "row",
+      "rowid",
+      "rownum",
+      "rows",
+      "select",
+      "session",
+      "set",
+      "share",
+      "size",
+      "smallint",
+      "start",
+      "successful",
+      "synonym",
+      "sysdate",
+      "table",
+      "then",
+      "to",
+      "trigger",
+      "uid",
+      "union",
+      "unique",
+      "update",
+      "user",
+      "validate",
+      "values",
+      "varchar",
+      "varchar2",
+      "view",
+      "whenever",
+      "where",
+      "with",
+      "sequence",
+      "type",
+      "package",
+      "body",
     ]);
     return reservedWords.has(word.toLowerCase());
   }
-  
+
   function formatFieldName(fieldName) {
-    return isOracleReservedWord(fieldName) ? `"${fieldName.toLowerCase()}"` : fieldName;
+    return isOracleReservedWord(fieldName)
+      ? `"${fieldName.toLowerCase()}"`
+      : fieldName;
   }
 }
