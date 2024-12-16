@@ -990,6 +990,9 @@ export function initQuickQuery(container, updateHeaderTitle) {
       )
     ) {
       if (lowerColumnName.endsWith("_time")) {
+        if (value && isValidDate(value)) {
+          return formatTimestamp(value);
+        }
         return "SYSDATE";
       } else {
         if (value === null || value === undefined || value.trim() === "") {
@@ -1067,16 +1070,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
         return isNaN(value) ? "NULL" : value;
 
       case upperDataType === "DATE":
-        if (value.toUpperCase() === "SYSDATE") {
-          return "SYSDATE";
-        }
-        return `TO_DATE('${value}', 'YYYY-MM-DD HH24:MI:SS')`;
+        return formatTimestamp(value);
 
       case upperDataType.startsWith("TIMESTAMP"):
-        if (value.toUpperCase() === "SYSDATE") {
-          return "SYSDATE";
-        }
-        return `TO_TIMESTAMP('${value}', 'YYYY-MM-DD HH24:MI:SS.FF')`;
+        return formatTimestamp(value);
 
       case upperDataType === "BOOLEAN":
         return value.toLowerCase() === "true" ? "1" : "0";
@@ -1091,6 +1088,72 @@ export function initQuickQuery(container, updateHeaderTitle) {
         console.warn(`Unhandled data type: ${dataType} for value: ${value}`);
         return `'${value}'`;
     }
+  }
+
+  function formatTimestamp(value) {
+    if (!value || typeof value !== "string") {
+      return "NULL";
+    }
+
+    // Handle SYSDATE
+    if (value.toUpperCase() === "SYSDATE") {
+      return "SYSDATE";
+    }
+
+    // Find matching format configuration
+    for (const formatConfig of Object.values(DATE_FORMATS)) {
+      if (formatConfig.regex.test(value)) {
+        // Try parsing with each format in the configuration
+        for (const format of formatConfig.formats) {
+          const parsedDate = moment(value, format, true);
+          if (parsedDate.isValid()) {
+            let formattedDate;
+            let oracleFormat;
+
+            // Check if it's a date-only format (no time component)
+            if (value.includes("/") && !value.includes(":")) {
+              formattedDate = parsedDate.format("YYYY-MM-DD");
+              oracleFormat = "YYYY-MM-DD";
+            }
+            // Handle timestamp with fractional seconds
+            else if (value.includes(".") || value.includes(",")) {
+              const fractionalPart = value.split(/[.,]/)[1];
+              const precision = Math.min(fractionalPart.length, 9);
+              formattedDate =
+                parsedDate.format("YYYY-MM-DD HH:mm:ss") +
+                "." +
+                fractionalPart.substring(0, precision);
+              oracleFormat = `YYYY-MM-DD HH24:MI:SS.FF${precision}`;
+            }
+            // Handle regular datetime
+            else if (value.includes(":")) {
+              formattedDate = parsedDate.format("YYYY-MM-DD HH:mm:ss");
+              oracleFormat = "YYYY-MM-DD HH24:MI:SS";
+            }
+            // Handle date-only
+            else {
+              formattedDate = parsedDate.format("YYYY-MM-DD");
+              oracleFormat = "YYYY-MM-DD";
+            }
+
+            return `TO_TIMESTAMP('${formattedDate}', '${oracleFormat}')`;
+          }
+        }
+      }
+    }
+
+    // If no format matches but isValidDate passed, try a last resort parse
+    if (isValidDate(value)) {
+      const parsedDate = moment(value);
+      if (parsedDate.isValid()) {
+        return `TO_TIMESTAMP('${parsedDate.format(
+          "YYYY-MM-DD"
+        )}', 'YYYY-MM-DD')`;
+      }
+    }
+
+    console.warn(`Invalid date format: ${value}. Using as-is.`);
+    return `TO_TIMESTAMP('${value.replace(/'/g, "''")}', 'YYYY-MM-DD')`;
   }
 
   function showError(message) {
@@ -1184,11 +1247,23 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function isValidDate(value) {
+    if (!value || typeof value !== "string") {
+      return false;
+    }
+
+    // Handle SYSDATE
     if (value.toUpperCase() === "SYSDATE") {
       return true;
     }
-    const date = new Date(value);
-    return !isNaN(date.getTime());
+
+    // Check against all defined formats
+    return Object.values(DATE_FORMATS).some((formatConfig) => {
+      return (
+        formatConfig.formats.some((format) =>
+          moment(value, format, true).isValid()
+        ) || formatConfig.regex.test(value)
+      );
+    });
   }
 
   function downloadSQL() {
@@ -1397,4 +1472,42 @@ export function initQuickQuery(container, updateHeaderTitle) {
       ? `"${fieldName.toLowerCase()}"`
       : fieldName;
   }
+
+  const DATE_FORMATS = {
+    DATE_ONLY: {
+      formats: [
+        "DD/MM/YYYY",
+        "DD-MM-YYYY",
+        "YYYY-MM-DD",
+        "DD/M/YYYY",
+        "M/D/YYYY",
+        "DD-MON-YY",
+        "DD-MON-YYYY",
+      ],
+      regex:
+        /^(\d{2}[-/]\d{2}[-/]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}|\d{2}-[A-Z]{3}-\d{2}|\d{2}-[A-Z]{3}-\d{4})$/i,
+      oracleFormat: "YYYY-MM-DD",
+    },
+    DATE_TIME: {
+      formats: [
+        "DD-MM-YYYY HH:mm:ss",
+        "YYYY-MM-DD HH:mm:ss",
+        "DD-MON-YYYY HH:mm:ss",
+      ],
+      regex:
+        /^(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2}|\d{2}-[A-Z]{3}-\d{4})\s\d{2}:\d{2}:\d{2}$/i,
+      oracleFormat: "DD-MM-YYYY HH24:MI:SS",
+    },
+    TIMESTAMP: {
+      formats: ["DD-MM-YYYY HH.mm.ss,SSSSSSSSS"],
+      regex: /^\d{2}-\d{2}-\d{4}\s\d{2}\.\d{2}\.\d{2},\d{1,9}$/,
+      oracleFormat: "DD-MM-YYYY HH24:MI:SS.FF9",
+    },
+    TIMESTAMP_AM_PM: {
+      formats: ["M/D/YYYY h:mm:ss.SSSSSS A"],
+      regex:
+        /^\d{1,2}\/\d{1,2}\/\d{4}\s\d{1,2}:\d{2}:\d{2}(\.\d{1,6})?\s[AP]M$/,
+      oracleFormat: "MM/DD/YYYY HH24:MI:SS.FF6",
+    },
+  };
 }
