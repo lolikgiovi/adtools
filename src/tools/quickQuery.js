@@ -1110,13 +1110,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
             let formattedDate;
             let oracleFormat;
 
-            // Check if it's a date-only format (no time component)
-            if (value.includes("/") && !value.includes(":")) {
-              formattedDate = parsedDate.format("YYYY-MM-DD");
-              oracleFormat = "YYYY-MM-DD";
-            }
             // Handle timestamp with fractional seconds
-            else if (value.includes(".") || value.includes(",")) {
+            if (value.includes(".") || value.includes(",")) {
               const fractionalPart = value.split(/[.,]/)[1];
               const precision = Math.min(fractionalPart.length, 9);
               formattedDate =
@@ -1124,16 +1119,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
                 "." +
                 fractionalPart.substring(0, precision);
               oracleFormat = `YYYY-MM-DD HH24:MI:SS.FF${precision}`;
-            }
-            // Handle regular datetime
-            else if (value.includes(":")) {
+            } else {
+              // All other cases (including date-only) get standard timestamp format
               formattedDate = parsedDate.format("YYYY-MM-DD HH:mm:ss");
               oracleFormat = "YYYY-MM-DD HH24:MI:SS";
-            }
-            // Handle date-only
-            else {
-              formattedDate = parsedDate.format("YYYY-MM-DD");
-              oracleFormat = "YYYY-MM-DD";
             }
 
             return `TO_TIMESTAMP('${formattedDate}', '${oracleFormat}')`;
@@ -1147,13 +1136,16 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const parsedDate = moment(value);
       if (parsedDate.isValid()) {
         return `TO_TIMESTAMP('${parsedDate.format(
-          "YYYY-MM-DD"
-        )}', 'YYYY-MM-DD')`;
+          "YYYY-MM-DD HH:mm:ss"
+        )}', 'YYYY-MM-DD HH24:MI:SS')`;
       }
     }
 
     console.warn(`Invalid date format: ${value}. Using as-is.`);
-    return `TO_TIMESTAMP('${value.replace(/'/g, "''")}', 'YYYY-MM-DD')`;
+    return `TO_TIMESTAMP('${value.replace(
+      /'/g,
+      "''"
+    )}', 'YYYY-MM-DD HH24:MI:SS')`;
   }
 
   function showError(message) {
