@@ -54,7 +54,20 @@ class App {
     try {
       this.codeMirror = await initCodeMirror();
       this.setupNavigation();
-      this.loadTool(Object.keys(this.tools)[7]);
+
+      // Get initial route from current path
+      const path = window.location.pathname;
+      const initialTool = path.startsWith("/tools/")
+        ? path.split("/").pop()
+        : Object.keys(this.tools)[7]; // Your default tool
+
+      // Check if the tool exists
+      if (this.tools[initialTool]) {
+        this.loadTool(initialTool);
+      } else {
+        // Redirect to default tool if invalid URL
+        this.loadTool(Object.keys(this.tools)[7]);
+      }
     } catch (error) {
       console.error("Failed to initialize CodeMirror:", error);
     }
@@ -74,18 +87,26 @@ class App {
 
   loadTool(toolName) {
     const contentDiv = document.getElementById("content");
-    contentDiv.innerHTML = ""; // Clear previous content each time changing the tool
+    contentDiv.innerHTML = "";
     if (this.tools[toolName]) {
       loadToolCSS(toolName);
-      this.currentTool = toolName; //initialize the app
+      this.currentTool = toolName;
       this.tools[toolName].init(contentDiv);
-      history.pushState(null, null, `#${toolName}`); //update url #hash
-      this.updateActiveButton(toolName); // Update active button
 
-      // Add a small delay before tracking
+      // Use hash for local development, path for production
+      if (
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1"
+      ) {
+        history.pushState(null, null, `#${toolName}`);
+      } else {
+        history.pushState(null, null, `/tools/${toolName}`);
+      }
+
+      this.updateActiveButton(toolName);
       setTimeout(() => {
         trackFeatureUsage(toolName);
-      }, 1000); // 1000 milliseconds = 1 second delay
+      }, 1000);
     }
   }
 

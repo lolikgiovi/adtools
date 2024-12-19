@@ -14,6 +14,28 @@ document.addEventListener("DOMContentLoaded", () => {
     app.loadTool(hash || Object.keys(app.tools)[0]);
   });
 
+  // Add burger menu functionality
+  const burgerMenu = document.getElementById("burger-menu");
+  const mainNav = document.getElementById("main-nav");
+
+  burgerMenu.addEventListener("click", () => {
+    mainNav.classList.toggle("show");
+  });
+
+  // Close menu when a tool is selected
+  mainNav.addEventListener("click", (e) => {
+    if (e.target.tagName === "BUTTON") {
+      mainNav.classList.remove("show");
+    }
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!mainNav.contains(e.target) && !burgerMenu.contains(e.target)) {
+      mainNav.classList.remove("show");
+    }
+  });
+
   // Add touch event handler for content scrolling
   const contentElement = document.getElementById("content");
   contentElement.addEventListener(
