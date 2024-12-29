@@ -1,105 +1,50 @@
 import { copyToClipboard } from "../utils/buttons.js";
 
-export function initQuickQuery(container, updateHeaderTitle) {
-  const html = `
-    <div class="tool-container quick-query-tool-container">
-      <div class="quick-query-content">
-        <div class="content-a">
-          <div class="quick-query-left-panel">
-            <div class="button-group">
-              <select id="queryTypeSelect">
-                <option value="merge">MERGE INTO</option>
-                <option value="insert">INSERT INTO</option>
-              </select>
-              <input type="text" id="tableNameInput" placeholder="schema_name.table_name" value="schema_name.table_name">
-              </div>
-              <div class="button-group quick-query-left-controls">
-              <button id="addNewSchemaRow">Add row</button>
-              <button id="removeLastSchemaRow">Remove last row</button>
-              <button id="clearAll">Clear</button>
-              <button id="generateQuery">Generate Query</button>
-            </div>
-            <div id="spreadsheet-schema"></div>
-            <div id="guideContainer">
-              <button id="toggleGuide" class="toggle-guide">Tutorial & Simulation</button>
-              <div id="guide" class="guide-content hidden">
-                <h4>Quick Guide:</h4>
-                <ul>
-                  <li>Copy and paste your database schema.</li>
-                  <li>Use "PK" in the Nullable field to indicate Primary Keys. If no "PK" is stated, default PK would be field[0].</li>
-                  <li>You can have multiple primary keys.</li>
-                  <li>Fill in the Data Input with your values.</li>
-                  <li>Click buttons below to simulate the query generation.</li>
-                </ul>
-                <div class = "button-group simulate-buttons">
-                  <button id="simulationFillSchemaButton" class="simulate-button">1. Fill Schema</button>
-                  <p>&rarr;</p>
-                  <button id="simulationFillDataButton" class="simulate-button">2. Fill Data</button>
-                  <p>&rarr;</p>
-                  <button id="simulationGenerateQueryButton" class="simulate-button">3. Generate Query</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="quick-query-right-panel">
-            <div class="button-group quick-query-right-controls">
-              <button id="toggleWordWrap">Word Wrap: Off</button>
-              <button id="copySQL">Copy SQL</button>
-              <button id="downloadSQL">Download SQL</button>
-            </div>
-            <div id="warningMessages"></div>
-            <div id="errorMessages"></div>
-            <div id="queryEditor" class="quick-query-content-area"></div>
-          </div>
-        </div>
-        <div class="content-b">
-          <div class="button-group">
-            <h3>Data Input</h3>
-            <p>Note: First row of data must be field names.</p>
-            <div class="button-group simulate-buttons">
-              <button id="addFieldNames">Add field names from schema</button>
-              <button id="addDataRow">Add Row</button>
-              <button id="removeDataRow">Remove Last Row</button>
-            </div>
-          </div>
-          <div id="spreadsheet-data"></div>
-        </div>
-      </div>
-    </div>
-  `;
-  container.innerHTML = html;
+function retryOperation(operation, options = {}) {
+  const {
+    retries = 3,
+    delay = 1000,
+    backoff = 2,
+    name = 'Operation',
+    onFailedAttempt = null
+  } = options;
 
-  clearError();
-  adjustTableNameInputWidth();
+  return new Promise((resolve, reject) => {
+    let attempt = 0;
 
-  let editor;
-  let schemaTable;
-  let dataTable;
+    function tryOperation() {
+      operation()
+        .then(result => {
+          if (attempt > 0) {
+            console.log(`${name} succeeded on attempt ${attempt + 1}`);
+          }
+          resolve(result);
+        })
+        .catch(error => {
+          if (attempt < retries - 1) {
+            const waitTime = delay * Math.pow(backoff, attempt);
+            console.warn(`${name} failed, attempt ${attempt + 1}/${retries}. Retrying in ${waitTime}ms...`);
+            
+            if (onFailedAttempt) {
+              onFailedAttempt(error, attempt + 1, retries);
+            }
+            
+            attempt++;
+            setTimeout(tryOperation, waitTime);
+          } else {
+            console.error(`${name} failed after ${retries} attempts`);
+            reject(error);
+          }
+        });
+    }
 
-  // Load Handsontable script and CSS dynamically
-  loadHandsontable().then(() => {
-    initializeSchemaTable();
-    initializeEditor();
-    setupEventListeners();
+    tryOperation();
   });
+}
 
-  function loadHandsontable() {
-    return new Promise((resolve, reject) => {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href =
-        "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css";
-      document.head.appendChild(link);
+export function initQuickQuery(container, updateHeaderTitle) {
 
-      const script = document.createElement("script");
-      script.src =
-        "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js";
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
-
+  // Business Logics
   function initializeSchemaTable() {
     const schemaContainer = document.getElementById("spreadsheet-schema");
     const data = [["", "", "", ""]];
@@ -298,77 +243,13 @@ export function initQuickQuery(container, updateHeaderTitle) {
     setTimeout(() => editor.refresh(), 0);
   }
 
-  function setupEventListeners() {
-    document
-      .getElementById("generateQuery")
-      .addEventListener("click", handleGenerateQuery);
-    document
-      .getElementById("copySQL")
-      .addEventListener("click", () =>
-        copyToClipboard(editor.getValue(), document.getElementById("copySQL"))
-      );
-    document
-      .getElementById("clearAll")
-      .addEventListener("click", handleClearAll);
-    document
-      .getElementById("downloadSQL")
-      .addEventListener("click", downloadSQL);
-    document
-      .getElementById("toggleGuide")
-      .addEventListener("click", toggleGuide);
-    document
-      .getElementById("queryTypeSelect")
-      .addEventListener("change", handleGenerateQuery);
-    document
-      .getElementById("toggleWordWrap")
-      .addEventListener("click", toggleWordWrap);
-    document
-      .getElementById("simulationFillSchemaButton")
-      .addEventListener("click", handleSimulationFillSchema);
-    document
-      .getElementById("simulationFillDataButton")
-      .addEventListener("click", handleSimulationFillData);
-    document
-      .getElementById("simulationGenerateQueryButton")
-      .addEventListener("click", handleSimulationGenerateQuery);
-    document
-      .getElementById("addFieldNames")
-      .addEventListener("click", addFieldNamesFromSchema);
-    document
-      .getElementById("tableNameInput")
-      .addEventListener("input", adjustTableNameInputWidth);
-    document
-      .getElementById("tableNameInput")
-      .addEventListener("change", adjustTableNameInputWidth);
-    document
-      .getElementById("addDataRow")
-      .addEventListener("click", handleAddDataRow);
-    document
-      .getElementById("removeDataRow")
-      .addEventListener("click", handleRemoveDataRow);
-    document
-      .getElementById("addNewSchemaRow")
-      .addEventListener("click", handleAddNewSchemaRow);
-    document
-      .getElementById("removeLastSchemaRow")
-      .addEventListener("click", handleRemoveLastSchemaRow);
-  }
-
+  // Event Handlers
   function handleAddDataRow() {
-    // Get current data
     const currentData = dataTable.getData();
-
-    // Get number of columns from schema
     const schemaData = schemaTable.getData().filter((row) => row[0]);
     const columnCount = schemaData.length;
-
-    // Create new empty row
     const newRow = Array(columnCount).fill(null);
-
-    // Add new row to current data
     const newData = [...currentData, newRow];
-
-    // Load the new data into the table
     dataTable.loadData(newData);
   }
 
@@ -396,7 +277,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     schemaTable.loadData(newData);
   }
 
-  function toggleGuide() {
+  function handleToggleGuide() {
     const guideContent = document.getElementById("guide");
     const toggleButton = document.getElementById("toggleGuide");
 
@@ -415,16 +296,16 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Fill the data
     const sampleData = [
-      ["TABLE_ID", "VARCHAR2(36 BYTE)", "PK", "", "1"],
-      ["DESC_ID", "VARCHAR2(500 BYTE)", "PK", "", "2"],
-      ["DESC_EN", "VARCHAR2(500 BYTE)", "No", "", "3"],
+      ["TABLE_ID", "VARCHAR2(36)", "PK", "", "1"],
+      ["DESC_ID", "VARCHAR2(500)", "PK", "", "2"],
+      ["DESC_EN", "VARCHAR2(500)", "No", "", "3"],
       ["AMOUNT", "NUMBER(15,2)", "Yes", "", "4"],
       ["SEQUENCE", "NUMBER(3,0)", "No", "", "5"],
       ["IS_ACTIVE", "NUMBER", "No", "", "6"],
       ["CREATED_TIME", "TIMESTAMP(6)", "No", "", "7"],
-      ["CREATED_BY", "VARCHAR2(36 BYTE)", "No", "", "8"],
+      ["CREATED_BY", "VARCHAR2(36)", "No", "", "8"],
       ["UPDATED_TIME", "TIMESTAMP(6)", "No", "", "9"],
-      ["UPDATED_BY", "VARCHAR2(36 BYTE)", "No", "", "10"],
+      ["UPDATED_BY", "VARCHAR2(36)", "No", "", "10"],
     ];
 
     schemaTable.loadData(sampleData);
@@ -478,7 +359,89 @@ export function initQuickQuery(container, updateHeaderTitle) {
     handleGenerateQuery();
 
     // Hide the guide
-    toggleGuide();
+    handleToggleGuide();
+  }
+
+  function handleDownloadSql() {
+    const sql = editor.getValue();
+    if (!sql) {
+      showError("No SQL to download. Please generate a query first.");
+      return;
+    }
+
+    const tableNameInput = document.getElementById("tableNameInput");
+    let tableName = tableNameInput.value.trim();
+
+    // Sanitize the filename
+    const sanitizedTableName = tableName
+      .replace(/[^a-z0-9_.]/gi, "_")
+      .toLowerCase();
+    const filename = `${sanitizedTableName}.sql`;
+
+    const blob = new Blob([sql], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleToggleWordWrap() {
+    const wordWrapButton = document.getElementById("toggleWordWrap");
+    const currentState = editor.getOption("lineWrapping");
+    const newState = !currentState;
+
+    editor.setOption("lineWrapping", newState);
+    wordWrapButton.textContent = `Word Wrap: ${newState ? "On" : "Off"}`;
+
+    // Refresh the editor to adjust its layout
+    editor.refresh();
+  }
+
+  function handleTableNameWidthAdjustment() {
+    const input = document.getElementById("tableNameInput");
+
+    // Create temporary span to measure text width
+    const span = document.createElement("span");
+    span.style.visibility = "hidden";
+    span.style.position = "absolute";
+    span.style.whiteSpace = "pre";
+    span.style.font = window.getComputedStyle(input).font;
+    span.textContent = input.value || input.placeholder;
+
+    document.body.appendChild(span);
+    const width = span.getBoundingClientRect().width;
+    document.body.removeChild(span);
+
+    // Add padding and border to the width
+    const finalWidth = Math.max(150, width + 20); // 20px for padding and border
+    input.style.width = finalWidth + "px";
+  }
+
+  function handleAddFieldNames() {
+    const schemaData = schemaTable.getData().filter((row) => row[0]);
+    const fieldNames = schemaData.map((row) => row[0]);
+
+    // Get the current data from dataTable
+    const currentData = dataTable.getData();
+
+    // Set the first row to the field names
+    if (currentData.length > 0) {
+      currentData[0] = fieldNames;
+    } else {
+      currentData.push(fieldNames);
+    }
+
+    // Ensure there are at least two rows
+    if (currentData.length < 2) {
+      currentData.push(Array(fieldNames.length).fill(null));
+    }
+
+    // Update the dataTable instance with the new data
+    dataTable.loadData(currentData);
   }
 
   function handleClearAll() {
@@ -520,16 +483,73 @@ export function initQuickQuery(container, updateHeaderTitle) {
     document.getElementById("queryTypeSelect").value = "merge";
   }
 
+  async function handleGenerateQuery() {
+    try {
+      // Get input data
+      const tableName = document.getElementById("tableNameInput").value.trim();
+      const queryType = document.getElementById("queryTypeSelect").value;
+      
+      // Get schema data (removing empty rows)
+      const schemaData = schemaTable.getData().filter(row => row[0]); 
+      
+      // Get input data (all rows including headers)
+      const inputData = dataTable.getData();
+  
+      // Handle empty table name
+      if (!tableName) {
+        throw new Error("Please fill in schema_name.table_name.");
+      }
+  
+      // Table name format warning (not blocking)
+      if (!tableName.includes(".")) {
+        showWarning("Warning: Table name format should be 'schema_name.table_name'.");
+      }
+  
+      // Generate the query
+      const query = generateQuery(tableName, queryType, schemaData, inputData);
+      
+      // Update editor with generated query
+      editor.setValue(query);
+      clearError();
+    } catch (error) {
+      showError(error.message);
+      editor.setValue("");
+    }
+  }
+
+  // Non Event Handlers but Impacting UI
+  function showError(message) {
+    const errorMessagesDiv = document.getElementById("errorMessages");
+    errorMessagesDiv.innerHTML = message;
+    errorMessagesDiv.style.display = "block";
+  }
+
+  function showWarning(message) {
+    const warningMessagesDiv = document.getElementById("warningMessages");
+    warningMessagesDiv.innerHTML = message;
+    warningMessagesDiv.style.display = "block";
+    warningMessagesDiv.style.color = "orange";
+  }
+
+  function clearError() {
+    const errorMessagesDiv = document.getElementById("errorMessages");
+    const warningMessagesDiv = document.getElementById("warningMessages");
+    errorMessagesDiv.textContent = "";
+    warningMessagesDiv.textContent = "";
+    errorMessagesDiv.style.display = "none";
+    warningMessagesDiv.style.display = "none";
+  }
+
+  // Helper Functions
   function adjustDbeaverSchema(schemaData) {
     // Check if it's a DBeaver schema format
-    // console.log("Schema data before shift:", JSON.stringify(schemaData));
     console.log("Adjusting schema data");
 
     // Remove the header row
-    const dataWithoutHeader = schemaData.slice(1);
+    const removedHeader = schemaData.slice(1);
 
     // Transform the data
-    const adjustedSchemaData = dataWithoutHeader.map((row) => {
+    const adjustedSchemaData = removedHeader.map((row) => {
       // Original DBeaver format:
       // [0]: Column Name
       // [1]: Column Type
@@ -555,8 +575,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       ];
     });
 
-    // console.log("Adjusted schema data:", JSON.stringify(adjustedSchemaData));
-
     // Update the schemaTable with the new data
     if (schemaTable && typeof schemaTable.loadData === "function") {
       try {
@@ -568,221 +586,66 @@ export function initQuickQuery(container, updateHeaderTitle) {
       }
     }
   }
-  async function handleGenerateQuery() {
-    const tableName = document.getElementById("tableNameInput").value.trim();
-    const queryType = document.getElementById("queryTypeSelect").value;
 
-    // Handle empty table name
-    if (!tableName) {
-      showError("Please fill in schema_name.table_name.");
-      return;
-    }
-
-    //if table name format not "schema_name.table_name", show warning
-    if (!tableName.includes(".")) {
-      showWarning(
-        "Warning: Table name format should be 'schema_name.table_name'."
+  function validateSchema(schemaData) {
+    // Check for empty schema
+    if (schemaData.length === 0) {
+      throw new Error(
+        "Schema Validation Error:<br>Please fill in the schema (see the left panel)."
       );
     }
 
-    try {
-      const schemaData = schemaTable.getData().filter((row) => row[0]); // filter out empty rows
-      const inputData = dataTable.getData();
+    // Check for DBeaver format
+    if (schemaData[0][0] === "Column Name") {
+      adjustDbeaverSchema(schemaData);
+      showWarning("Schema data adjusted from DBeaver to SQL Developer format.");
+      return true;
+    }
 
-      const hasSchemaData = schemaData.some((row) =>
-        row.some((cell) => cell !== null && cell !== "")
-      );
-      const hasFieldNames =
-        inputData[0] &&
-        inputData[0].some((cell) => cell !== null && cell !== "");
-      const hasFirstDataRow =
-        inputData[1] &&
-        inputData[1].some((cell) => cell !== null && cell !== "");
+    // Track invalid entries
+    const invalidDataTypes = [];
+    const invalidNullableValues = [];
 
-      // Adjust schema data if it's a DBeaver schema format
-      if (hasSchemaData && schemaData[0][0] === "Column Name") {
-        adjustDbeaverSchema(schemaData);
-        return;
+    // Validate each row in the schema once
+    schemaData.forEach((row) => {
+      const [fieldName, dataType, nullable] = row;
+
+      // Validate data type
+      if (!isValidOracleDataType(dataType)) {
+        invalidDataTypes.push(`${dataType} (in field ${fieldName})`);
       }
 
-      // empty data handling
-      if (!hasSchemaData || !hasFieldNames || !hasFirstDataRow) {
-        showError("Not enough data. Please fill in the schema and data.");
-        return;
+      // Validate nullable values
+      if (!isValidNullableDataType(nullable)) {
+        invalidNullableValues.push(`${nullable} (in field ${fieldName})`);
       }
+    });
 
-      // Get field names from schema and data input
-      const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
-      console.log("Schema field names:", schemaFieldNames);
-      const dataFieldNames = inputData[0].map((field) =>
-        field ? field.toLowerCase() : ""
-      );
+    // Build error message if any validations failed
+    if (invalidDataTypes.length > 0 || invalidNullableValues.length > 0) {
+      const errors = [];
 
-      // Find missing fields
-      const missingInSchema = dataFieldNames.filter(
-        (field) => field && !schemaFieldNames.includes(field)
-      );
-      const missingInData = schemaFieldNames.filter(
-        (field) => !dataFieldNames.includes(field)
-      );
-
-      // Check if counts match and report missing fields
-      if (missingInSchema.length > 0 || missingInData.length > 0) {
-        let errorMessage = `Mismatch in fields. `;
-        if (missingInSchema.length > 0) {
-          errorMessage += `<br>Fields in data input but not in schema: ${missingInSchema.join(
-            ", "
-          )}. `;
-        }
-        if (missingInData.length > 0) {
-          errorMessage += `<br>Fields in schema but not in data input: ${missingInData.join(
-            ", "
-          )}. `;
-        }
-        showError(errorMessage);
-        return;
-      }
-
-      // Check for empty field names in data input
-      const emptyColumnIndex = dataFieldNames.findIndex(
-        (field) => field === ""
-      );
-      if (emptyColumnIndex !== -1) {
-        showError(
-          `Empty field name found in data input at field ${
-            emptyColumnIndex + 1
-          }.`
+      if (invalidDataTypes.length > 0) {
+        errors.push(
+          `Invalid Oracle SQL Data Types: ${invalidDataTypes.join(", ")}`
         );
-        return;
       }
 
-      // Separate field names (first row) from the actual data
-      const fieldNames = inputData[0];
-      const actualData = inputData
-        .slice(1)
-        .filter((row) => row.some((cell) => cell !== null && cell !== ""));
+      if (invalidNullableValues.length > 0) {
+        errors.push(
+          `Invalid nullable values: ${invalidNullableValues.join(
+            ", "
+          )}. Must be 'Yes', 'No', or 'PK'`
+        );
+      }
 
-      const query = generateQuickQuery(
-        tableName,
-        queryType,
-        schemaData,
-        fieldNames,
-        actualData
-      );
-      editor.setValue(query);
-      clearError();
-    } catch (error) {
-      showError(`Error generating query: ${error.message}`);
+      throw new Error(`Schema Validation Error:<br>${errors.join("<br>")}`);
     }
+
+    return true;
   }
 
-  function generateQuickQuery(
-    tableName,
-    queryType,
-    schemaData,
-    fieldNames,
-    inputData
-  ) {
-    console.log("Generating quick query for:", tableName);
-    console.log("Query type:", queryType);
-    console.log("Schema data:", schemaData);
-    console.log("Field names:", fieldNames);
-    console.log("Input data:", inputData);
-
-    // Validate data
-    const validationError = validateData(schemaData, fieldNames, inputData);
-    if (validationError) {
-      throw new Error(`${validationError}`);
-    }
-
-    // Find primary keys
-    const primaryKeys = findPrimaryKeys(schemaData, tableName);
-    console.log("Primary keys:", primaryKeys);
-
-    // Generate query
-    let query = `SET DEFINE OFF;\n\n`;
-
-    query += generateMainQuery(
-      queryType,
-      tableName,
-      schemaData,
-      fieldNames,
-      inputData,
-      primaryKeys
-    );
-
-    // Generate select queries
-    const selectQueries = generateSelectQueries(
-      tableName,
-      primaryKeys,
-      schemaData,
-      fieldNames,
-      inputData
-    );
-    if (selectQueries) {
-      query += selectQueries;
-    }
-    return query;
-  }
-
-  function validateData(schemaData, fieldNames, inputData) {
-    const specialColumns = [
-      "created_time",
-      "updated_time",
-      "created_by",
-      "updated_by",
-      "config_id",
-      "system_config_id",
-    ];
-
-    for (let i = 0; i < fieldNames.length; i++) {
-      const fieldName = fieldNames[i].toLowerCase();
-      const schemaRow = schemaData.find(
-        (row) => row[0].toLowerCase() === fieldName
-      );
-
-      if (!schemaRow) {
-        return `Field "${fieldName}" in data input does not exist in the schema.`;
-      }
-
-      const [columnName, dataType, nullable] = schemaRow;
-      if (specialColumns.includes(columnName.toLowerCase())) continue;
-
-      if (!isValidDataType(dataType)) {
-        return `<br>Invalid data type "${dataType}" for field "${columnName}" in Schema Table (See left panel)`;
-      }
-
-      if (!["yes", "no", "pk", "y", "n"].includes(nullable.toLowerCase())) {
-        return `Invalid nullable value "${nullable}" for field "${columnName}". Must be 'Yes', 'No', or contain 'PK'`;
-      }
-
-      for (let row of inputData) {
-        const value = row[i];
-        // Null checking
-        if (
-          nullable.toLowerCase() === "no" &&
-          (value === null || value === undefined || value === "")
-        ) {
-          return `NULL value not allowed for non-nullable field "${columnName}"`;
-        }
-        // allow _id field with number data type to pass data type checking
-        if (
-          columnName.toLowerCase().endsWith("_id") &&
-          dataType.toUpperCase() === "NUMBER"
-        ) {
-          continue;
-        }
-        // Data type checking
-        if (!isValidValueForDataType(value, dataType)) {
-          return `Invalid value "${value}" for data type "${dataType}" in field "${columnName}"`;
-        }
-      }
-    }
-
-    return null; // No errors found
-  }
-
-  function isValidDataType(dataType) {
+  function isValidOracleDataType(dataType) {
     const validTypes = [
       "NUMBER",
       "VARCHAR",
@@ -795,12 +658,407 @@ export function initQuickQuery(container, updateHeaderTitle) {
     ];
     return validTypes.some((type) => dataType.toUpperCase().startsWith(type));
   }
+  
+  function isValidNullableDataType(nullable) {
+    const validValues = [
+      "Yes",
+      "No",
+      "PK",
+      "yes",
+      "no",
+      "pk",
+      "Y",
+      "N",
+      "y",
+      "n",
+    ];
+    return validValues.includes(nullable);
+  }
+
+  function matchSchemaWithData(schemaData, inputData) {
+    const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ''));
+    const hasFieldNames = inputData[0]?.some(cell => cell !== null && cell !== '');
+    const hasFirstDataRow = inputData[1]?.some(cell => cell !== null && cell !== '');
+  
+    if (!hasSchemaData || !hasFieldNames || !hasFirstDataRow) {
+      throw new Error('Incomplete data. Please fill in both schema and data sheets.');
+    }
+  
+    const schemaFieldNames = schemaData.map(row => row[0].toLowerCase());
+    const inputFieldNames = inputData[0].map(field => field?.toLowerCase());
+  
+    // Check for empty field names in data input
+    const emptyColumnIndex = inputFieldNames.findIndex(field => !field);
+    if (emptyColumnIndex !== -1) {
+      throw new Error(
+        `Field Name Error:<br>Empty field name found in data input at column ${emptyColumnIndex + 1}`
+      );
+    }
+  
+    // Find mismatches in both directions
+    const missingInSchema = inputFieldNames.filter(field => !schemaFieldNames.includes(field));
+    const missingInData = schemaFieldNames.filter(field => !inputFieldNames.includes(field));
+  
+    if (missingInSchema.length > 0 || missingInData.length > 0) {
+      const errors = [];
+      if (missingInSchema.length > 0) {
+        errors.push(`Fields in data but not in schema: ${missingInSchema.join(", ")}`);
+      }
+      if (missingInData.length > 0) {
+        errors.push(`Fields in schema but not in data: ${missingInData.join(", ")}`);
+      }
+      throw new Error(`Field Mismatch Error:<br>${errors.join("<br>")}`);
+    }
+  
+    return true;
+  }
+
+  function generateQuery(tableName, queryType, schemaData, inputData) {
+    // 1. Validate schema
+    validateSchema(schemaData);
+    console.log("Schema validated");
+  
+    // 2. Match schema and data fields
+    matchSchemaWithData(schemaData, inputData);
+    console.log("Schema and data fields matched");
+  
+    // 3. Get field names from first row of input data
+    const fieldNames = inputData[0].map(name => name.toLowerCase());
+    console.log("Field names extracted");
+    
+    // 4. Get data rows (excluding header row)
+    const dataRows = inputData.slice(1).filter(row => 
+      row.some(cell => cell !== null && cell !== "")
+    );
+    console.log("Data rows extracted");
+
+    const schemaMap = new Map(
+      schemaData.map(row => [row[0].toLowerCase(), row])
+    );
+  
+    // 5. Process each row of data
+    const processedRows = dataRows.map((rowData, rowIndex) => {
+      try {
+        // Process each field in the row
+        return fieldNames.map((fieldName, colIndex) => {
+          const schemaRow = schemaMap.get(fieldName.toLowerCase()); // Get schema row by field name
+  
+          if (!schemaRow) {
+            throw new Error(`Schema definition not found for field "${fieldName}"`);
+          }
+  
+          const [, dataType, nullable] = schemaRow;
+          const value = rowData[colIndex];
+  
+          // Process the value based on data type
+          return {
+            fieldName,
+            formattedValue: processValue(value, dataType, nullable, fieldName)
+          };
+        });
+      } catch (error) {
+        throw new Error(`Row ${rowIndex + 2}: ${error.message}`);
+      }
+    });
+
+    console.log("Data processed", processedRows);
+  
+    // 6. Find primary keys for MERGE statements
+    const primaryKeys = findPrimaryKeys(schemaData, tableName);
+    console.log("Primary keys found:", primaryKeys);
+  
+    // 7. Generate SQL based on query type
+    let query = `SET DEFINE OFF;\n\n`;
+
+    if (queryType === "insert") {
+      processedRows.forEach(processedFields => {
+        query += generateInsertStatement(tableName, processedFields);
+        query += "\n\n";
+      });
+    } else {
+      processedRows.forEach(processedFields => {
+        query += generateMergeStatement(tableName, processedFields, primaryKeys);
+        query += "\n\n";
+      });
+    }
+
+    // 8. Add select query to verify results
+    const selectQuery = generateSelectStatement(
+      tableName,
+      primaryKeys,
+      processedRows
+    );
+    
+    if (selectQuery) {
+      query += selectQuery;
+    }
+  
+    return query;
+  }
+  
+  function generateInsertStatement(tableName, processedFields) {
+    const fields = processedFields.map(f => formatFieldName(f.fieldName));
+    const values = processedFields.map(f => f.formattedValue);
+    
+    return `INSERT INTO ${tableName} (${fields.join(", ")}) \nVALUES (${values.join(", ")});`;
+  }
+  
+  function generateMergeStatement(tableName, processedFields, primaryKeys) {
+    // Format fields for SELECT part
+    const selectFields = processedFields
+      .map(f => `\n  ${f.formattedValue} AS ${formatFieldName(f.fieldName)}`)
+      .join(",");
+  
+    // Format ON conditions for primary keys
+    const pkConditions = primaryKeys
+      .map(pk => `tgt.${formatFieldName(pk)} = src.${formatFieldName(pk)}`)
+      .join(" AND ");
+  
+    // Format UPDATE SET clause (excluding PKs and creation fields)
+    const updateFields = processedFields
+      .filter(f => !primaryKeys.includes(f.fieldName) && 
+                  !["created_time", "created_by"].includes(f.fieldName))
+      .map(f => `  tgt.${formatFieldName(f.fieldName)} = src.${formatFieldName(f.fieldName)}`)
+      .join(",\n");
+  
+    // Format INSERT fields and values
+    const insertFields = processedFields.map(f => formatFieldName(f.fieldName)).join(", ");
+    const insertValues = processedFields
+      .map(f => `src.${formatFieldName(f.fieldName)}`)
+      .join(", ");
+  
+    return `MERGE INTO ${tableName} tgt\nUSING (SELECT${selectFields}\n  FROM DUAL) src\nON (${pkConditions})\nWHEN MATCHED THEN UPDATE SET\n${updateFields}\nWHEN NOT MATCHED THEN INSERT (${insertFields})\nVALUES (${insertValues});`;
+  }
+
+  function generateSelectStatement(tableName, primaryKeys, processedRows) {
+    if (primaryKeys.length === 0) return null;
+    if (processedRows.length === 0) return null;
+  
+    // Collect formatted values for each primary key
+    const pkValueMap = new Map(primaryKeys.map(pk => [pk.toLowerCase(), new Set()]));
+  
+    // Go through each processed row to collect PK values
+    processedRows.forEach(row => {
+      row.forEach(field => {
+        if (pkValueMap.has(field.fieldName)) {
+          // Only add non-null values
+          if (field.formattedValue !== 'NULL') {
+            pkValueMap.get(field.fieldName).add(field.formattedValue);
+          }
+        }
+      });
+    });
+  
+    // Build WHERE conditions
+    const whereConditions = [];
+    
+    pkValueMap.forEach((values, pkName) => {
+      if (values.size > 0) {
+        whereConditions.push(
+          `${formatFieldName(pkName)} IN (${Array.from(values).join(", ")})`
+        );
+      }
+    });
+  
+    // If no valid PK values found, return null
+    if (whereConditions.length === 0) return null;
+  
+    return `\nSELECT * FROM ${tableName} WHERE ${whereConditions.join(" AND ")} ORDER BY created_time ASC;`;
+  }
+  
+  function processValue(value, dataType, nullable, fieldName) {
+    // Constants
+    const AUDIT_FIELDS = {
+      time: ["created_time", "updated_time"],
+      by: ["created_by", "updated_by"]
+    };
+  
+    // Handle audit fields
+    if (AUDIT_FIELDS.time.includes(fieldName)) {
+      const hasNoValue = !value;
+      const hasNoTimestampCharacters = !/[-/]/.test(value);
+      return hasNoValue || hasNoTimestampCharacters ? "SYSDATE" : formatTimestamp(value);
+    }
+    
+    if (AUDIT_FIELDS.by.includes(fieldName)) {
+      return value?.trim() ? `'${value.replace(/'/g, "''")}'` : "'SYSTEM'";
+    }
+  
+    // Handle NULL values
+    const isNullValue = value === null || value === undefined || value === "" || 
+                       value?.toLowerCase() === "null";
+    if (isNullValue) {
+      if (nullable?.toLowerCase() !== "yes") {
+        throw new Error(`NULL value not allowed for non-nullable field "${fieldName}"`);
+      }
+      return "NULL";
+    }
+  
+    // Handle special ID fields
+    const upperDataType = dataType.toUpperCase();
+    
+    // Config ID with NUMBER type
+    if ((fieldName === "config_id" || fieldName.endsWith("_id")) && 
+        upperDataType === "NUMBER") {
+      return `(SELECT MAX(${fieldName})+1 FROM ${tableName})`;
+    }
+    
+    // Config ID with VARCHAR type
+    if (fieldName === "config_id" && upperDataType.startsWith("VARCHAR")) {
+      if (value.toLowerCase() === "uuid" || !isValidUUID(value)) {
+        return `'${crypto.randomUUID()}'`;
+      }
+      return `'${value}'`;
+    }
+    
+    // System config ID
+    if (fieldName === "system_config_id") {
+      return `(SELECT MAX(CAST(${fieldName} AS INT))+1 FROM ${tableName})`;
+    }
+  
+    // Process regular values based on data type
+    const fieldDataType = parseDataType(dataType);
+    console.log(`"${fieldName}" \t\t "${value}" \t\t "${dataType}"`);
+    
+    switch (fieldDataType.type) {
+      case 'NUMBER':
+        // NUMBER(1,0) / boolean number
+        if (fieldDataType.precision === 1 && fieldDataType.scale === 0) { 
+          if (value !== '0' && value !== '1' && value !== 0 && value !== 1) {
+            throw new Error(
+              `Invalid boolean value "${value}" for field "${fieldName}". Only 0 or 1 are allowed.`
+            );
+          }
+          return value;
+        }
+        
+        // Convert comma to dot if present
+        const normalizedValue = value.toString().replace(',', '.');
+        const num = parseFloat(normalizedValue);
+        
+        if (isNaN(num)) {
+          throw new Error(`Invalid numeric value "${value}" for field "${fieldName}"`);
+        }
+        
+        // Validate precision and scale if specified
+        if (fieldDataType.precision) {
+          validateNumberPrecision(num, fieldDataType.precision, fieldDataType.scale, fieldName);
+        }
+        
+        return normalizedValue;
+
+      case 'VARCHAR':
+      case 'VARCHAR2':
+      case 'CHAR':
+        const UUID_V4_MAXLENGTH = 36;
+
+        if (value.toLowerCase() === "uuid") {
+          if (fieldDataType.maxLength && fieldDataType.maxLength < UUID_V4_MAXLENGTH) {
+            throw new Error(`Field "${fieldName}" length (${fieldDataType.maxLength}) is too small to store UUID. Minimum required length is ${UUID_V4_MAXLENGTH}.`);
+          }
+          return `'${crypto.randomUUID()}'`;
+        }
+
+        if (fieldDataType.maxLength) {
+          const length = fieldDataType.unit === 'BYTE' ? 
+            new TextEncoder().encode(value).length : 
+            value.length;
+            
+          if (length > fieldDataType.maxLength) {
+            throw new Error(
+              `Value exceeds maximum length of ${fieldDataType.maxLength} ${fieldDataType.unit} for field "${fieldName}"`
+            );
+          }
+        }
+        return `'${value.replace(/'/g, "''")}'`;
+        
+      case 'DATE':
+      case 'TIMESTAMP':
+        if (!isValidDate(value)) {
+          throw new Error(`Invalid date value "${value}" for field "${fieldName}"`);
+        }
+        return formatTimestamp(value);
+        
+      case 'CLOB':
+        return formatCLOB(value);
+        
+      case 'BLOB':
+        return formatBLOB(value);
+        
+      default:
+        return `'${value.replace(/'/g, "''")}'`;
+    }
+  }
+  
+  function parseDataType(dataType) {
+    const upperType = dataType.toUpperCase();
+    
+    // Parse NUMBER type
+    const numberMatch = upperType.match(/NUMBER\((\d+)(?:,\s*(\d+))?\)/);
+    if (numberMatch) {
+      return {
+        type: 'NUMBER',
+        precision: parseInt(numberMatch[1]),
+        scale: numberMatch[2] ? parseInt(numberMatch[2]) : 0
+      };
+    }
+    
+    // Parse VARCHAR/CHAR type
+    const stringMatch = upperType.match(/(VARCHAR2?|CHAR)\((\d+)(?:\s+(BYTE|CHAR))?\)/);
+    if (stringMatch) {
+      return {
+        type: stringMatch[1],
+        maxLength: parseInt(stringMatch[2]),
+        unit: stringMatch[3] || 'BYTE'
+      };
+    }
+    
+    // Basic types
+    if (upperType.startsWith('TIMESTAMP')) return { type: 'TIMESTAMP' };
+    if (upperType === 'DATE') return { type: 'DATE' };
+    if (upperType === 'CLOB') return { type: 'CLOB' };
+    if (upperType === 'BLOB') return { type: 'BLOB' };
+    if (upperType === 'NUMBER') return { type: 'NUMBER' };
+    
+    return { type: upperType };
+  }
+  
+  function validateNumberPrecision(num, precision, scale, fieldName) {
+    const numStr = Math.abs(num).toString();
+    const parts = numStr.split('.');
+    
+    const integerDigits = parts[0].length;
+    const decimalDigits = parts[1]?.length || 0;
+    
+    if (integerDigits + decimalDigits > precision) {
+      throw new Error(
+        `Value ${num} exceeds maximum precision of ${precision} for field "${fieldName}"`
+      );
+    }
+    
+    if (scale !== undefined && decimalDigits > scale) {
+      throw new Error(
+        `Value ${num} exceeds maximum scale of ${scale} (${precision},${scale}) for field "${fieldName}"`
+      );
+    }
+    
+    if (scale !== undefined && integerDigits > (precision - scale)) {
+      throw new Error(
+        `Integer part of ${num} exceeds maximum allowed digits for field "${fieldName}"`
+      );
+    }
+  }
+
+  function formatFieldName(fieldName) {
+    return isOracleReservedWord(fieldName)
+      ? `"${fieldName.toLowerCase()}"`
+      : fieldName;
+  }
 
   function findPrimaryKeys(data, tableName) {
     console.log("Finding primary keys for:", tableName);
-    console.log("Data:", data);
 
-    // Special case for "config" tables
+    // For config table, use field parameter_key if exist as primary key
     if (tableName.toLowerCase().endsWith("config")) {
       const parameterKeyField = data.find(
         (field) => field[0].toLowerCase() === "parameter_key"
@@ -815,163 +1073,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     if (pkFields.length > 0) return pkFields;
 
-    // If no primary keys found, use the first field
-    console.log(
-      "No explicit primary key found. Using first field:",
-      data[0][0]
-    );
+    // If no primary keys found, use the first field as default
     return [data[0][0]];
-  }
-
-  function generateMainQuery(
-    queryType,
-    tableName,
-    schemaData,
-    fieldNames,
-    inputData,
-    primaryKeys
-  ) {
-    let query = "";
-    const lowercaseFieldNames = fieldNames.map((name) => name.toLowerCase());
-    for (let rowData of inputData) {
-      if (queryType === "insert") {
-        query += generateInsertQuery(
-          tableName,
-          schemaData,
-          lowercaseFieldNames,
-          rowData
-        );
-      } else if (queryType === "merge") {
-        query += generateMergeQuery(
-          tableName,
-          schemaData,
-          lowercaseFieldNames,
-          rowData,
-          primaryKeys.map((pk) => pk.toLowerCase())
-        );
-      }
-      query += "\n\n";
-    }
-    return query;
-  }
-
-  function generateInsertQuery(tableName, schemaData, fieldNames, rowData) {
-    let query = `INSERT INTO ${tableName} (${fieldNames
-      .map(formatFieldName)
-      .join(", ")}) \nVALUES (`;
-    const values = fieldNames.map((fieldName, index) => {
-      const schemaRow = schemaData.find(
-        (row) => row[0].toLowerCase() === fieldName
-      );
-      return formatValue(
-        rowData[index],
-        schemaRow[1],
-        schemaRow[2],
-        tableName,
-        fieldName
-      );
-    });
-    query += values.join(", ") + ");";
-    return query;
-  }
-
-  function generateMergeQuery(
-    tableName,
-    schemaData,
-    fieldNames,
-    rowData,
-    primaryKeys
-  ) {
-    let query = `MERGE INTO ${tableName} tgt\nUSING (SELECT`;
-    query += fieldNames
-      .map((fieldName, index) => {
-        const schemaRow = schemaData.find(
-          (row) => row[0].toLowerCase() === fieldName
-        );
-        return `\n  ${formatValue(
-          rowData[index],
-          schemaRow[1],
-          schemaRow[2],
-          tableName,
-          fieldName
-        )} AS ${formatFieldName(fieldName)}`;
-      })
-      .join(",");
-    query += `\nFROM DUAL) src\nON (${primaryKeys
-      .map((pk) => `tgt.${formatFieldName(pk)} = src.${formatFieldName(pk)}`)
-      .join(" AND ")})\n`;
-    query += `WHEN MATCHED THEN UPDATE SET\n`;
-    query += fieldNames
-      .filter(
-        (fieldName) =>
-          !primaryKeys.map((pk) => pk.toLowerCase()).includes(fieldName) &&
-          !["created_time", "created_by"].includes(fieldName)
-      )
-      .map(
-        (fieldName) =>
-          `  tgt.${formatFieldName(fieldName)} = src.${formatFieldName(
-            fieldName
-          )}`
-      )
-      .join(",\n");
-    query += `\nWHEN NOT MATCHED THEN INSERT (${fieldNames
-      .map(formatFieldName)
-      .join(", ")})\n`;
-    query += `VALUES (${fieldNames
-      .map((fieldName) => `src.${formatFieldName(fieldName)}`)
-      .join(", ")});`;
-    return query;
-  }
-
-  function generateSelectQueries(
-    tableName,
-    primaryKeys,
-    schemaData,
-    fieldNames,
-    inputData
-  ) {
-    console.log("Generating select queries for:", tableName);
-    console.log("Primary keys:", primaryKeys);
-    console.log("Input data:", inputData);
-
-    let query = "";
-    const lowercaseFieldNames = fieldNames.map((name) => name.toLowerCase());
-    const lowercasePrimaryKeys = primaryKeys.map((pk) => pk.toLowerCase());
-    const pkIndices = lowercasePrimaryKeys.map((pk) =>
-      lowercaseFieldNames.indexOf(pk)
-    );
-    const pkValues = pkIndices.map((index) =>
-      inputData.map((row) => row[index]).filter(Boolean)
-    );
-
-    console.log("PK values:", pkValues);
-
-    if (pkValues.some((values) => values.length > 0)) {
-      const selectClauses = lowercasePrimaryKeys
-        .map((pk, index) => {
-          const values = pkValues[index];
-          if (values.length > 0) {
-            const schemaRow = schemaData.find(
-              (row) => row[0].toLowerCase() === pk
-            );
-            const formattedValues = values
-              .map((value) =>
-                formatValue(value, schemaRow[1], "Yes", tableName, pk)
-              )
-              .join(", ");
-            return `${formatFieldName(pk)} IN (${formattedValues})`;
-          }
-          return null;
-        })
-        .filter(Boolean);
-
-      const whereClause = selectClauses.join(" AND ");
-      query += `\nSELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY created_time ASC;`;
-    } else {
-      console.log("No valid primary key values found");
-      query += `\n\n-- No valid primary key values found\n-- SELECT * FROM ${tableName} WHERE ...;`;
-    }
-    return query;
   }
 
   function isValidUUID(str) {
@@ -980,121 +1083,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     return uuidV4Regex.test(str);
   }
 
-  function formatValue(value, dataType, nullable, tableName, columnName) {
-    const lowerColumnName = columnName.toLowerCase();
-
-    // handling for created_time, updated_time, created_by, updated_by
-    if (
-      ["created_time", "updated_time", "created_by", "updated_by"].includes(
-        lowerColumnName
-      )
-    ) {
-      if (lowerColumnName.endsWith("_time")) {
-        if (value && isValidDate(value)) {
-          return formatTimestamp(value);
-        }
-        return "SYSDATE";
-      } else {
-        if (value === null || value === undefined || value.trim() === "") {
-          return "'SYSTEM'";
-        }
-        return `'${value.replace(/'/g, "''")}'`; // Return the actual value if provided
-      }
-    }
-
-    // handling for NULL
-    if (
-      (value === null ||
-        value.toLowerCase() === "null" ||
-        value === undefined ||
-        value === "") &&
-      nullable.toLowerCase() === "yes"
-    ) {
-      return "NULL";
-    }
-
-    // Handle sequential config ID or _id with number data type
-    if (
-      (lowerColumnName === "config_id" &&
-        dataType.toUpperCase() === "NUMBER") ||
-      (lowerColumnName.endsWith("_id") && dataType.toUpperCase() === "NUMBER")
-    ) {
-      return `(SELECT MAX(${lowerColumnName})+1 FROM ${tableName})`;
-    }
-
-    // Handle UUID for config_id
-    if (
-      lowerColumnName === "config_id" &&
-      dataType.toUpperCase().startsWith("VARCHAR")
-    ) {
-      if (value.toLowerCase() === "uuid" || !isValidUUID(value)) {
-        return `'${crypto.randomUUID()}'`;
-      }
-      // If it's already a valid UUID, return it as is
-      return `'${value}'`;
-    }
-
-    // Handle sequential system config id
-    if (lowerColumnName === "system_config_id") {
-      return `(SELECT MAX(CAST(${lowerColumnName} AS INT))+1 FROM ${tableName})`;
-    }
-
-    // extra handling for non-nullable fields
-    if (
-      (value === null || value === undefined || value === "") &&
-      nullable.toLowerCase() === "no"
-    ) {
-      throw new Error(
-        `NULL value not allowed for non-nullable field in table ${tableName}`
-      );
-    }
-
-    const upperDataType = dataType.toUpperCase();
-
-    switch (true) {
-      case upperDataType === "NUMBER(1,0)":
-        if (value === "1" || value === "0") {
-          return value;
-        }
-        throw new Error(
-          `Invalid value for NUMBER(1,0): ${value}. Only 0 or 1 are allowed.`
-        );
-
-      case upperDataType.startsWith("VARCHAR") ||
-        upperDataType.startsWith("CHAR"):
-        return `'${value.replace(/'/g, "''")}'`;
-
-      case upperDataType === "NUMBER" ||
-        upperDataType.startsWith("FLOAT") ||
-        upperDataType.startsWith("DECIMAL"):
-        return isNaN(value) ? "NULL" : value;
-
-      case upperDataType === "DATE":
-        return formatTimestamp(value);
-
-      case upperDataType.startsWith("TIMESTAMP"):
-        return formatTimestamp(value);
-
-      case upperDataType === "BOOLEAN":
-        return value.toLowerCase() === "true" ? "1" : "0";
-
-      case upperDataType === "CLOB":
-        return formatCLOB(value);
-
-      case upperDataType === "BLOB":
-        return formatBLOB(value);
-
-      default:
-        console.warn(`Unhandled data type: ${dataType} for value: ${value}`);
-        return `'${value}'`;
-    }
-  }
-
   function formatTimestamp(value) {
-    if (!value || typeof value !== "string") {
-      return "NULL";
-    }
-
     // Handle SYSDATE
     if (value.toUpperCase() === "SYSDATE") {
       return "SYSDATE";
@@ -1131,7 +1120,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       }
     }
 
-    // If no format matches but isValidDate passed, try a last resort parse
     if (isValidDate(value)) {
       const parsedDate = moment(value);
       if (parsedDate.isValid()) {
@@ -1146,28 +1134,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       /'/g,
       "''"
     )}', 'YYYY-MM-DD HH24:MI:SS')`;
-  }
-
-  function showError(message) {
-    const errorMessagesDiv = document.getElementById("errorMessages");
-    errorMessagesDiv.innerHTML = message;
-    errorMessagesDiv.style.display = "block";
-  }
-
-  function showWarning(message) {
-    const warningMessagesDiv = document.getElementById("warningMessages");
-    warningMessagesDiv.innerHTML = message;
-    warningMessagesDiv.style.display = "block";
-    warningMessagesDiv.style.color = "orange";
-  }
-
-  function clearError() {
-    const errorMessagesDiv = document.getElementById("errorMessages");
-    const warningMessagesDiv = document.getElementById("warningMessages");
-    errorMessagesDiv.textContent = "";
-    warningMessagesDiv.textContent = "";
-    errorMessagesDiv.style.display = "none";
-    warningMessagesDiv.style.display = "none";
   }
 
   function formatCLOB(value) {
@@ -1207,42 +1173,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     return `UTL_RAW.CAST_TO_RAW('${value}')`;
   }
 
-  function isValidValueForDataType(value, dataType) {
-    if (
-      value === null ||
-      value === undefined ||
-      value === "" ||
-      value.toLowerCase() === "null"
-    ) {
-      return true; // Null values are checked separately
-    }
-
-    const upperDataType = dataType.toUpperCase();
-
-    if (upperDataType === "NUMBER(1,0)") {
-      return value === "0" || value === "1" || value === 0 || value === 1;
-    } else if (upperDataType.startsWith("NUMBER")) {
-      return !isNaN(parseFloat(value)) && isFinite(value);
-    } else if (
-      upperDataType.startsWith("VARCHAR2") ||
-      upperDataType.startsWith("CHAR")
-    ) {
-      return typeof value === "string";
-    } else if (
-      upperDataType === "DATE" ||
-      upperDataType.startsWith("TIMESTAMP")
-    ) {
-      return isValidDate(value);
-    }
-
-    return true; // For other data types, assume it's valid
-  }
-
   function isValidDate(value) {
-    if (!value || typeof value !== "string") {
-      return false;
-    }
-
     // Handle SYSDATE
     if (value.toUpperCase() === "SYSDATE") {
       return true;
@@ -1256,88 +1187,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
         ) || formatConfig.regex.test(value)
       );
     });
-  }
-
-  function downloadSQL() {
-    const sql = editor.getValue();
-    if (!sql) {
-      showError("No SQL to download. Please generate a query first.");
-      return;
-    }
-
-    const tableNameInput = document.getElementById("tableNameInput");
-    let tableName = tableNameInput.value.trim();
-
-    // Sanitize the filename
-    const sanitizedTableName = tableName
-      .replace(/[^a-z0-9_.]/gi, "_")
-      .toLowerCase();
-    const filename = `${sanitizedTableName}.sql`;
-
-    const blob = new Blob([sql], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  function toggleWordWrap() {
-    const wordWrapButton = document.getElementById("toggleWordWrap");
-    const currentState = editor.getOption("lineWrapping");
-    const newState = !currentState;
-
-    editor.setOption("lineWrapping", newState);
-    wordWrapButton.textContent = `Word Wrap: ${newState ? "On" : "Off"}`;
-
-    // Refresh the editor to adjust its layout
-    editor.refresh();
-  }
-
-  function adjustTableNameInputWidth() {
-    const input = document.getElementById("tableNameInput");
-
-    // Create temporary span to measure text width
-    const span = document.createElement("span");
-    span.style.visibility = "hidden";
-    span.style.position = "absolute";
-    span.style.whiteSpace = "pre";
-    span.style.font = window.getComputedStyle(input).font;
-    span.textContent = input.value || input.placeholder;
-
-    document.body.appendChild(span);
-    const width = span.getBoundingClientRect().width;
-    document.body.removeChild(span);
-
-    // Add padding and border to the width
-    const finalWidth = Math.max(150, width + 20); // 20px for padding and border
-    input.style.width = finalWidth + "px";
-  }
-
-  function addFieldNamesFromSchema() {
-    const schemaData = schemaTable.getData().filter((row) => row[0]);
-    const fieldNames = schemaData.map((row) => row[0]);
-
-    // Get the current data from dataTable
-    const currentData = dataTable.getData();
-
-    // Set the first row to the field names
-    if (currentData.length > 0) {
-      currentData[0] = fieldNames;
-    } else {
-      currentData.push(fieldNames);
-    }
-
-    // Ensure there are at least two rows
-    if (currentData.length < 2) {
-      currentData.push(Array(fieldNames.length).fill(null));
-    }
-
-    // Update the dataTable instance with the new data
-    dataTable.loadData(currentData);
   }
 
   function isOracleReservedWord(word) {
@@ -1465,6 +1314,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       : fieldName;
   }
 
+  // Constants
   const DATE_FORMATS = {
     DATE_ONLY: {
       formats: [
@@ -1502,4 +1352,288 @@ export function initQuickQuery(container, updateHeaderTitle) {
       oracleFormat: "MM/DD/YYYY HH24:MI:SS.FF6",
     },
   };
+
+  const MAIN_HTML_PAGE = `
+    <div class="tool-container quick-query-tool-container">
+      <div class="quick-query-content">
+        <div class="content-a">
+          <div class="quick-query-left-panel">
+            <div class="button-group">
+              <select id="queryTypeSelect">
+                <option value="merge">MERGE INTO</option>
+                <option value="insert">INSERT INTO</option>
+              </select>
+              <input type="text" id="tableNameInput" placeholder="schema_name.table_name" value="schema_name.table_name">
+              </div>
+              <div class="button-group quick-query-left-controls">
+              <button id="addNewSchemaRow">Add row</button>
+              <button id="removeLastSchemaRow">Remove last row</button>
+              <button id="clearAll">Clear</button>
+              <button id="generateQuery">Generate Query</button>
+            </div>
+            <div id="spreadsheet-schema"></div>
+            <div id="guideContainer">
+              <button id="toggleGuide" class="toggle-guide">Tutorial & Simulation</button>
+              <div id="guide" class="guide-content hidden">
+                <h4>Quick Guide:</h4>
+                <ul>
+                  <li>Copy and paste your database schema.</li>
+                  <li>Use "PK" in the Nullable field to indicate Primary Keys. If no "PK" is stated, default PK would be field[0].</li>
+                  <li>You can have multiple primary keys.</li>
+                  <li>Fill in the Data Input with your values.</li>
+                  <li>Click buttons below to simulate the query generation.</li>
+                </ul>
+                <div class = "button-group simulate-buttons">
+                  <button id="simulationFillSchemaButton" class="simulate-button">1. Fill Schema</button>
+                  <p>&rarr;</p>
+                  <button id="simulationFillDataButton" class="simulate-button">2. Fill Data</button>
+                  <p>&rarr;</p>
+                  <button id="simulationGenerateQueryButton" class="simulate-button">3. Generate Query</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="quick-query-right-panel">
+            <div class="button-group quick-query-right-controls">
+              <button id="toggleWordWrap">Word Wrap: Off</button>
+              <button id="copySQL">Copy SQL</button>
+              <button id="downloadSQL">Download SQL</button>
+            </div>
+            <div id="warningMessages"></div>
+            <div id="errorMessages"></div>
+            <div id="queryEditor" class="quick-query-content-area"></div>
+          </div>
+        </div>
+        <div class="content-b">
+          <div class="button-group">
+            <h3>Data Input</h3>
+            <p>Note: First row of data must be field names.</p>
+            <div class="button-group simulate-buttons">
+              <button id="addFieldNames">Add field names from schema</button>
+              <button id="addDataRow">Add Row</button>
+              <button id="removeDataRow">Remove Last Row</button>
+            </div>
+          </div>
+          <div id="spreadsheet-data"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const ERROR_HTML_PAGE = `
+    <div class="tool-container quick-query-tool-container">
+      <div class="quick-query-error-state">
+        <div class="error-message"></div>
+        <button class="retry-button">Retry Loading</button>
+      </div>
+    </div>
+  `;
+
+  const showErrorState = (errorMessage) => {
+    container.innerHTML = ERROR_HTML_PAGE;
+    const errorDiv = container.querySelector('.error-message');
+    const retryButton = container.querySelector('.retry-button');
+    
+    errorDiv.innerHTML = `<b>Failed to load Quick Query Resources:</b><br>${errorMessage}.<br>We use CDN links to load the required tools. Please check your network connection and try again.`;
+    
+    // Add retry functionality
+    retryButton.addEventListener('click', async () => {
+      retryButton.disabled = true;
+      retryButton.textContent = 'Retrying...';
+      try {
+        await initQuickQuery(container, updateHeaderTitle);
+      } catch (error) {
+        retryButton.disabled = false;
+        retryButton.textContent = 'Retry Loading';
+      }
+    });
+  };
+
+  const EVENT_HANDLERS = {
+    // Button click handlers
+    'generateQuery': {
+      event: 'click',
+      handler: handleGenerateQuery
+    },
+    'copySQL': {
+      event: 'click',
+      handler: (event) => copyToClipboard(editor.getValue(), event.target)
+    },
+    'clearAll': {
+      event: 'click',
+      handler: handleClearAll
+    },
+    'downloadSQL': {
+      event: 'click',
+      handler: handleDownloadSql
+    },
+    'toggleGuide': {
+      event: 'click',
+      handler: handleToggleGuide
+    },
+    'toggleWordWrap': {
+      event: 'click',
+      handler: handleToggleWordWrap
+    },
+    
+    // Simulation handlers
+    'simulationFillSchemaButton': {
+      event: 'click',
+      handler: handleSimulationFillSchema
+    },
+    'simulationFillDataButton': {
+      event: 'click',
+      handler: handleSimulationFillData
+    },
+    'simulationGenerateQueryButton': {
+      event: 'click',
+      handler: handleSimulationGenerateQuery
+    },
+    
+    // Data manipulation handlers
+    'addFieldNames': {
+      event: 'click',
+      handler: handleAddFieldNames
+    },
+    'addDataRow': {
+      event: 'click',
+      handler: handleAddDataRow
+    },
+    'removeDataRow': {
+      event: 'click',
+      handler: handleRemoveDataRow
+    },
+    'addNewSchemaRow': {
+      event: 'click',
+      handler: handleAddNewSchemaRow
+    },
+    'removeLastSchemaRow': {
+      event: 'click',
+      handler: handleRemoveLastSchemaRow
+    },
+    
+    // Input handlers
+    'tableNameInput': [
+      {
+        event: 'input',
+        handler: handleTableNameWidthAdjustment
+      },
+      {
+        event: 'change',
+        handler: handleTableNameWidthAdjustment
+      }
+    ],
+    
+    // Select handlers
+    'queryTypeSelect': {
+      event: 'change',
+      handler: handleGenerateQuery
+    }
+  };
+
+  function setupEventListeners() {
+    Object.entries(EVENT_HANDLERS).forEach(([id, config]) => {
+      const element = document.getElementById(id);
+      if (!element) {
+        console.warn(`Element with id '${id}' not found`);
+        return;
+      }
+  
+      // Handle cases where an element has multiple event handlers
+      if (Array.isArray(config)) {
+        config.forEach(({ event, handler }) => {
+          element.addEventListener(event, handler);
+        });
+      } else {
+        // Single event handler case
+        const { event, handler } = config;
+        element.addEventListener(event, handler);
+      }
+    });
+  }
+
+  // Initiate page tools 
+  let editor;
+  let schemaTable;
+  let dataTable;
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve(true);
+      script.onerror = (error) => reject(new Error(`Failed to load script: ${src}`));
+      document.head.appendChild(script);
+    });
+  }
+  
+  function loadStyle(href) {
+    return new Promise((resolve, reject) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.onload = () => resolve(true);
+      link.onerror = (error) => reject(new Error(`Failed to load stylesheet: ${href}`));
+      document.head.appendChild(link);
+    });
+  }
+
+  async function loadHandsontable() {
+    return retryOperation(async () => {
+      const [scriptLoaded, styleLoaded] = await Promise.all([
+        loadScript("https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"),
+        loadStyle("https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css")
+      ]);
+      return { scriptLoaded, styleLoaded };
+    }, { 
+      name: 'Handsontable loading',
+      retries: 3,
+      delay: 1000
+    });
+  }
+
+  // Start the initialization process
+  return new Promise((resolve, reject) => {
+    try {
+      // Set up initial HTML
+      container.innerHTML = MAIN_HTML_PAGE;
+
+      // Clear any existing errors
+      clearError();
+      handleTableNameWidthAdjustment();
+
+      // Single initialization flow with retry logic
+      retryOperation(
+        () => new Promise((resolveOp, rejectOp) => {
+          loadHandsontable()
+            .then(() => {
+              initializeSchemaTable();
+              initializeEditor();
+              setupEventListeners();
+              resolveOp();
+            })
+            .catch(rejectOp);
+        }),
+        {
+          name: 'Quick Query initialization',
+          retries: 3,
+          delay: 1000,
+          onFailedAttempt: (error, attempt, maxRetries) => {
+            console.warn(`Initialization attempt ${attempt}/${maxRetries} failed:`, error);
+            showError(`Loading tools required... (Attempt ${attempt}/${maxRetries})`);
+          }
+        }
+      )
+      .then(resolve)
+      .catch(error => {
+        console.error('Failed to initialize Quick Query:', error);
+        showErrorState(error.message || 'Unknown error occurred');
+        reject(error);
+      });
+
+    } catch (error) {
+      showErrorState(error.message || 'Unknown error occurred');
+      reject(error);
+    }
+  });
 }
