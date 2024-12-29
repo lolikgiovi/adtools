@@ -42,8 +42,10 @@ function retryOperation(operation, options = {}) {
   });
 }
 
-// Add Storage Management section after retryOperation
 const STORAGE_KEY = 'quickquery_schemas';
+const ORACLE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_$#]*$/;
+const MAX_SCHEMA_LENGTH = 30;
+const MAX_TABLE_LENGTH = 128;
 
 // Storage Helper Functions
 function parseTableIdentifier(fullTableName) {
@@ -138,7 +140,7 @@ function deleteSchema(fullTableName) {
   }
 }
 
-// Query Functions
+// Local Storage Query Functions
 function getAllTables() {
   const storageData = getStorageData();
   const allTables = [];
@@ -159,7 +161,331 @@ function getAllTables() {
   );
 }
 
+// Schema searching functions
+function getByteLength(str) {
+  return new TextEncoder().encode(str).length;
+}
+
+function validateOracleName(name, type = 'schema') {
+  if (!name) return false;
+  
+  // Check if name starts with a letter and contains only valid characters
+  if (!ORACLE_NAME_REGEX.test(name)) return false;
+  
+  // Check length based on type
+  const byteLength = getByteLength(name);
+  if (type === 'schema' && byteLength > MAX_SCHEMA_LENGTH) return false;
+  if (type === 'table' && byteLength > MAX_TABLE_LENGTH) return false;
+  
+  return true;
+}
+
+function sqlLikeToRegex(pattern) {
+  return new RegExp('^' + pattern
+    .replace(/%/g, '.*')
+    .replace(/_/g, '.')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    + '$', 'i');
+}
+
+function searchSavedSchemas(searchTerm) {
+  const allTables = getAllTables();
+  if (!searchTerm) return allTables;
+
+  // Split into schema and table parts
+  let [schemaSearch, tableSearch] = searchTerm.split('.');
+  
+  // DBeaver-style search behavior:
+  // 1. Before dot: search term can match either schema OR table name
+  // 2. After dot: only search tables within matched schemas
+  
+  if (!tableSearch) {
+    // No dot - search both schema and table names
+    const searchPattern = `%${schemaSearch}%`;
+    const pattern = sqlLikeToRegex(searchPattern);
+    
+    return allTables.filter(table => 
+      pattern.test(table.schemaName) || pattern.test(table.tableName)
+    ).sort((a, b) => {
+      // Sort by relevance:
+      // 1. Schema exact match
+      // 2. Table exact match
+      // 3. Schema starts with
+      // 4. Table starts with
+      // 5. Contains
+      const termLower = schemaSearch.toLowerCase();
+      const schemaA = a.schemaName.toLowerCase();
+      const schemaB = b.schemaName.toLowerCase();
+      const tableA = a.tableName.toLowerCase();
+      const tableB = b.tableName.toLowerCase();
+
+      function getScore(schema, table) {
+        if (schema === termLower) return 5;
+        if (table === termLower) return 4;
+        if (schema.startsWith(termLower)) return 3;
+        if (table.startsWith(termLower)) return 2;
+        return 1;
+      }
+
+      const scoreA = getScore(schemaA, tableA);
+      const scoreB = getScore(schemaB, tableB);
+
+      return scoreB - scoreA || schemaA.localeCompare(schemaB);
+    });
+  } else {
+    // Has dot - first find matching schemas, then filter tables
+    const schemaPattern = sqlLikeToRegex(`%${schemaSearch}%`);
+    const tablePattern = sqlLikeToRegex(`%${tableSearch}%`);
+    
+    // Find all schemas that match the pattern
+    const matchingSchemas = new Set(
+      allTables
+        .filter(table => schemaPattern.test(table.schemaName))
+        .map(table => table.schemaName)
+    );
+    
+    // Filter tables in matching schemas
+    return allTables
+      .filter(table => 
+        matchingSchemas.has(table.schemaName) && 
+        tablePattern.test(table.tableName)
+      )
+      .sort((a, b) => {
+        // Sort by schema match first, then table match
+        const schemaScoreA = schemaSearch.toLowerCase() === a.schemaName.toLowerCase() ? 1 : 0;
+        const schemaScoreB = schemaSearch.toLowerCase() === b.schemaName.toLowerCase() ? 1 : 0;
+        
+        if (schemaScoreA !== schemaScoreB) {
+          return schemaScoreB - schemaScoreA;
+        }
+        
+        const tableScoreA = tableSearch.toLowerCase() === a.tableName.toLowerCase() ? 1 : 0;
+        const tableScoreB = tableSearch.toLowerCase() === b.tableName.toLowerCase() ? 1 : 0;
+        
+        if (tableScoreA !== tableScoreB) {
+          return tableScoreB - tableScoreA;
+        }
+        
+        return a.tableName.localeCompare(b.tableName);
+      });
+  }
+}
+
+function setupTableNameSearch(parent) {
+  const {
+    schemaTable,
+    dataTable,
+    updateDataSpreadsheet,
+    handleAddFieldNames,
+    clearError
+  } = parent;
+
+  const tableNameInput = document.getElementById('tableNameInput');
+  
+  // Disable browser's default suggestions
+  tableNameInput.setAttribute('autocomplete', 'off');
+  tableNameInput.setAttribute('autocorrect', 'off');
+  tableNameInput.setAttribute('autocapitalize', 'off');
+  tableNameInput.setAttribute('spellcheck', 'false');
+  
+  // Create a container div and wrap it around the input
+  const container = document.createElement('div');
+  container.className = 'table-search-container';
+  tableNameInput.parentNode.insertBefore(container, tableNameInput);
+  container.appendChild(tableNameInput);
+  
+  // Create dropdown container
+  const dropdownContainer = document.createElement('div');
+  dropdownContainer.className = 'table-search-dropdown';
+  dropdownContainer.style.display = 'none';
+  container.appendChild(dropdownContainer);
+
+  // Keep track of selected item
+  let selectedIndex = -1;
+  let visibleItems = [];
+
+  function showDropdown(results) {
+    dropdownContainer.innerHTML = '';
+    visibleItems = [];
+    selectedIndex = -1;
+    
+    if (results.length === 0) {
+      dropdownContainer.style.display = 'none';
+      return;
+    }
+
+    const groupedResults = results.reduce((groups, table) => {
+      if (!groups[table.schemaName]) {
+        groups[table.schemaName] = [];
+      }
+      groups[table.schemaName].push(table);
+      return groups;
+    }, {});
+
+    Object.entries(groupedResults).forEach(([schemaName, tables]) => {
+      const schemaGroup = document.createElement('div');
+      schemaGroup.className = 'schema-group';
+      
+      const schemaHeader = document.createElement('div');
+      schemaHeader.className = 'schema-header';
+      schemaHeader.textContent = schemaName;
+      schemaGroup.appendChild(schemaHeader);
+
+      tables.forEach(table => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        item.textContent = table.tableName;
+        
+        // Store the full table name for easy access
+        item.dataset.fullName = table.fullName;
+        
+        // Add to visible items array for keyboard navigation
+        visibleItems.push(item);
+        
+        item.addEventListener('click', function() {
+          selectResult(table.fullName);
+        });
+
+        schemaGroup.appendChild(item);
+      });
+
+      dropdownContainer.appendChild(schemaGroup);
+    });
+
+    dropdownContainer.style.display = 'block';
+  }
+
+  function selectResult(fullName) {
+    // Set the input value
+    tableNameInput.value = fullName;
+    dropdownContainer.style.display = 'none';
+    
+    // Load the schema if it exists
+    const schema = loadSchema(fullName);
+    if (schema) {
+      parent.schemaTable.loadData(schema);
+      parent.dataTable.loadData([[], []]);
+      parent.updateDataSpreadsheet();
+      parent.handleAddFieldNames();
+      parent.clearError();
+    }
+
+    // Reset selection
+    selectedIndex = -1;
+    tableNameInput.focus();
+  }
+
+  function updateSelection() {
+    visibleItems.forEach((item, index) => {
+      if (index === selectedIndex) {
+        item.classList.add('selected');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('selected');
+      }
+    });
+  }
+
+  function handleKeyDown(event) {
+    if (dropdownContainer.style.display === 'none' && event.key === 'ArrowDown') {
+      // If dropdown is hidden and down arrow is pressed, show recent items
+      const results = searchSavedSchemas('').slice(0, 7); // Get 7 most recent
+      showDropdown(results);
+      selectedIndex = -1;
+      return;
+    }
+
+    if (dropdownContainer.style.display === 'block') {
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          selectedIndex = Math.min(selectedIndex + 1, visibleItems.length - 1);
+          updateSelection();
+          break;
+
+        case 'ArrowUp':
+          event.preventDefault();
+          selectedIndex = Math.max(selectedIndex - 1, -1);
+          updateSelection();
+          break;
+
+        case 'Enter':
+          event.preventDefault();
+          if (selectedIndex >= 0 && selectedIndex < visibleItems.length) {
+            selectResult(visibleItems[selectedIndex].dataset.fullName);
+          }
+          break;
+
+        case 'Escape':
+          dropdownContainer.style.display = 'none';
+          selectedIndex = -1;
+          break;
+      }
+    }
+  }
+
+  function handleInput(event) {
+    const input = event.target.value.trim();
+    
+    // Clear any previous error styling
+    tableNameInput.style.borderColor = '';
+    
+    if (!input) {
+      // Show recent items if input is empty
+      const results = searchSavedSchemas('').slice(0, 7); // Get 7 most recent
+      showDropdown(results);
+      return;
+    }
+
+    const parts = input.split('.');
+    
+    // Validate each part
+    if (parts.length > 1) {
+      const [schema, table] = parts;
+      const isValidSchema = validateOracleName(schema, 'schema');
+      const isValidTable = table ? validateOracleName(table, 'table') : true;
+      
+      if (!isValidSchema || !isValidTable) {
+        tableNameInput.style.borderColor = 'red';
+        dropdownContainer.style.display = 'none';
+        return;
+      }
+    } else {
+      const isValidSchema = validateOracleName(parts[0], 'schema');
+      if (!isValidSchema) {
+        tableNameInput.style.borderColor = 'red';
+        dropdownContainer.style.display = 'none';
+        return;
+      }
+    }
+
+    const results = searchSavedSchemas(input);
+    showDropdown(results);
+  }
+
+  // Event Listeners
+  tableNameInput.addEventListener('input', handleInput);
+  tableNameInput.addEventListener('keydown', handleKeyDown);
+  
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (event) => {
+    if (!container.contains(event.target)) {
+      dropdownContainer.style.display = 'none';
+      selectedIndex = -1;
+    }
+  });
+}
+
 export function initQuickQuery(container, updateHeaderTitle) {
+
+  const parent = {
+    schemaTable: null,
+    dataTable: null,
+    updateDataSpreadsheet: null,
+    handleAddFieldNames: null,
+    clearError: null
+  };
 
   // Business Logics
   function initializeSchemaTable() {
@@ -272,6 +598,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
       },
     });
 
+    parent.schemaTable = schemaTable;
+
     initializeDataTable();
   }
 
@@ -308,6 +636,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
         return cellProperties;
       },
     });
+
+    parent.dataTable = dataTable;
   }
 
   function updateDataSpreadsheet() {
@@ -344,6 +674,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       dataTable.loadData(newData);
     }
   }
+  parent.updateDataSpreadsheet = updateDataSpreadsheet;
 
   function initializeEditor() {
     editor = CodeMirror(document.getElementById("queryEditor"), {
@@ -471,6 +802,81 @@ export function initQuickQuery(container, updateHeaderTitle) {
     updateDataSpreadsheet();
   }
 
+  // function handleSimulationFillSchema() {
+  //   // Fill the table name input with a complex case
+  //   document.getElementById("tableNameInput").value = "edge_Test.TABLE_123";
+  
+  //   // Edge test cases for schema
+  //   const testSchema = [
+  //     // Test case: Mixed case field names and special characters
+  //     ["Field_NAME_1", "VARCHAR2(50)", "PK", "", "1", "Test PK field"],
+      
+  //     // Test case: Number field with maximum precision and scale
+  //     ["amount_2", "NUMBER(38,10)", "No", "0", "2", "Max Oracle number"],
+      
+  //     // Test case: Nullable field with default
+  //     ["description", "VARCHAR2(4000)", "Yes", "'N/A'", "3", "Max VARCHAR2"],
+      
+  //     // Test case: Boolean/Flag field
+  //     ["is_active_FLAG", "NUMBER(1,0)", "No", "1", "4", "Boolean field"],
+      
+  //     // Test case: Reserved word as field name
+  //     ["\"TABLE\"", "VARCHAR2(100)", "No", "", "5", "Reserved word"],
+      
+  //     // Test case: Timestamp with timezone
+  //     ["event_time", "TIMESTAMP(9) WITH TIME ZONE", "No", "SYSDATE", "6", "Max precision"],
+      
+  //     // Test case: CLOB type
+  //     ["large_text", "CLOB", "Yes", "", "7", "CLOB field"]
+  //   ];
+  
+  //   schemaTable.loadData(testSchema);
+  // }
+
+  // function handleSimulationFillData() {
+  //   // Test data with edge cases
+  //   const testData = [
+  //     // Header row - mixed case and special characters
+  //     ["Field_NAME_1", "amount_2", "description", "is_active_FLAG", "\"TABLE\"", "event_time", "large_text"],
+      
+  //     // Row 1: Testing maximum values and special cases
+  //     [
+  //       "ABC123!@#$", // PK with special chars
+  //       "12345678901234567890.1234567890", // Large number
+  //       "This is a very long text string that tests the VARCHAR2 limit...", // Long text
+  //       "1", // Boolean true
+  //       "DROP TABLE", // SQL keyword
+  //       "2024-12-31 23:59:59.999999999 +00:00", // Max timestamp
+  //       "Very long CLOB text..." // CLOB content
+  //     ],
+      
+  //     // Row 2: Testing minimum/edge values
+  //     [
+  //       "", // Empty PK (should trigger error)
+  //       "-0.00000000001", // Small negative number
+  //       "", // Empty nullable field
+  //       "0", // Boolean false
+  //       "", // Empty reserved word field
+  //       "", // Empty timestamp (should use SYSDATE)
+  //       "" // Empty CLOB
+  //     ],
+      
+  //     // Row 3: Testing special characters and formats
+  //     [
+  //       "PK''QUOTE", // Single quote in PK
+  //       "1,234.56", // Number with comma
+  //       "Line1\nLine2", // Text with newline
+  //       "2", // Invalid boolean (should trigger error)
+  //       "TABLE;DROP", // Semicolon in text
+  //       "01-JAN-24", // Different date format
+  //       "<?xml version=\"1.0\"?><root>TEST</root>" // XML in CLOB
+  //     ]
+  //   ];
+  
+  //   dataTable.loadData(testData);
+  //   updateDataSpreadsheet();
+  // }
+
   function handleSimulationGenerateQuery() {
     // Generate the query
     handleGenerateQuery();
@@ -540,6 +946,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     // Update the dataTable instance with the new data
     dataTable.loadData(currentData);
   }
+  parent.handleAddFieldNames = handleAddFieldNames;
 
   function handleClearAll() {
     // Clear the table name input
@@ -636,6 +1043,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     errorMessagesDiv.style.display = "none";
     warningMessagesDiv.style.display = "none";
   }
+  parent.clearError = clearError;
 
   // Schema Management Functions
   function createSchemaOverlay() {
@@ -983,6 +1391,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     if (schemaData[0][0] === "Column Name") {
       adjustDbeaverSchema(schemaData);
       showWarning("Schema data adjusted from DBeaver to SQL Developer format.");
+      setTimeout(() => clearError(), 3000);
       return true;
     }
 
@@ -1138,7 +1547,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
           // Process the value based on data type
           return {
             fieldName,
-            formattedValue: processValue(value, dataType, nullable, fieldName)
+            formattedValue: processValue(value, dataType, nullable, fieldName, tableName),
           };
         });
       } catch (error) {
@@ -1251,7 +1660,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     return `\nSELECT * FROM ${tableName} WHERE ${whereConditions.join(" AND ")} ORDER BY created_time ASC;`;
   }
   
-  function processValue(value, dataType, nullable, fieldName) {
+  function processValue(value, dataType, nullable, fieldName, tableName) {
     // Constants
     const AUDIT_FIELDS = {
       time: ["created_time", "updated_time"],
@@ -2000,6 +2409,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
               initializeSchemaTable();
               initializeEditor();
               setupEventListeners();
+              setupTableNameSearch(parent);
+
 
               // Try to load most recent schema from local storage
               const allTables = getAllTables();
@@ -2013,6 +2424,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
                 }
               }
               createSchemaOverlay();
+              
               resolveOp();
             })
             .catch(rejectOp);
