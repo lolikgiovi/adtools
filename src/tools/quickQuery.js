@@ -774,10 +774,15 @@ export function initQuickQuery(container, updateHeaderTitle) {
     if (schema) {
       document.getElementById('tableNameInput').value = fullName;
       schemaTable.loadData(schema);
+      dataTable.loadData([[], []]);
       updateDataSpreadsheet();
+      handleAddFieldNames();
+      
       
       // Close the overlay after loading
       document.getElementById('schemaOverlay').classList.add('hidden');
+
+      
       
       // Clear any existing error messages
       clearError();

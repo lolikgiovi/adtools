@@ -108,7 +108,7 @@
 
 #guideContainer {
   margin-top: 16px;
-  visibility: hidden;
+  /* visibility: hidden; */
 }
 
 .toggle-guide {
