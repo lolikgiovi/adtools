@@ -42,6 +42,123 @@ function retryOperation(operation, options = {}) {
   });
 }
 
+// Add Storage Management section after retryOperation
+const STORAGE_KEY = 'quickquery_schemas';
+
+// Storage Helper Functions
+function parseTableIdentifier(fullTableName) {
+  const [schemaName, tableName] = fullTableName.split('.');
+  if (!schemaName || !tableName) {
+    throw new Error('Invalid table name format. Expected "schema_name.table_name"');
+  }
+  return { schemaName, tableName };
+}
+
+function getStorageData() {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) {
+      return {
+        schemas: {},
+        lastUpdated: new Date().toISOString()
+      };
+    }
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading storage:', error);
+    return {
+      schemas: {},
+      lastUpdated: new Date().toISOString()
+    };
+  }
+}
+
+function saveStorageData(data) {
+  try {
+    data.lastUpdated = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch (error) {
+    console.error('Error saving to storage:', error);
+    return false;
+  }
+}
+
+// Schema Management Functions
+function saveSchema(fullTableName, schemaData) {
+  try {
+    const { schemaName, tableName } = parseTableIdentifier(fullTableName);
+    const storageData = getStorageData();
+
+    if (!storageData.schemas[schemaName]) {
+      storageData.schemas[schemaName] = { tables: {} };
+    }
+
+    storageData.schemas[schemaName].tables[tableName] = {
+      schema: schemaData,
+      timestamp: new Date().toISOString()
+    };
+
+    return saveStorageData(storageData);
+  } catch (error) {
+    console.error('Error saving schema:', error);
+    return false;
+  }
+}
+
+function loadSchema(fullTableName) {
+  try {
+    const { schemaName, tableName } = parseTableIdentifier(fullTableName);
+    const storageData = getStorageData();
+    return storageData.schemas[schemaName]?.tables[tableName]?.schema || null;
+  } catch (error) {
+    console.error('Error loading schema:', error);
+    return null;
+  }
+}
+
+function deleteSchema(fullTableName) {
+  try {
+    const { schemaName, tableName } = parseTableIdentifier(fullTableName);
+    const storageData = getStorageData();
+
+    if (storageData.schemas[schemaName]?.tables[tableName]) {
+      delete storageData.schemas[schemaName].tables[tableName];
+      
+      if (Object.keys(storageData.schemas[schemaName].tables).length === 0) {
+        delete storageData.schemas[schemaName];
+      }
+
+      return saveStorageData(storageData);
+    }
+    return false;
+  } catch (error) {
+    console.error('Error deleting schema:', error);
+    return false;
+  }
+}
+
+// Query Functions
+function getAllTables() {
+  const storageData = getStorageData();
+  const allTables = [];
+
+  Object.entries(storageData.schemas).forEach(([schemaName, schemaData]) => {
+    Object.entries(schemaData.tables).forEach(([tableName, tableData]) => {
+      allTables.push({
+        fullName: `${schemaName}.${tableName}`,
+        schemaName,
+        tableName,
+        timestamp: tableData.timestamp
+      });
+    });
+  });
+
+  return allTables.sort((a, b) => 
+    new Date(b.timestamp) - new Date(a.timestamp)
+  );
+}
+
 export function initQuickQuery(container, updateHeaderTitle) {
 
   // Business Logics
@@ -401,26 +518,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
     editor.refresh();
   }
 
-  function handleTableNameWidthAdjustment() {
-    const input = document.getElementById("tableNameInput");
-
-    // Create temporary span to measure text width
-    const span = document.createElement("span");
-    span.style.visibility = "hidden";
-    span.style.position = "absolute";
-    span.style.whiteSpace = "pre";
-    span.style.font = window.getComputedStyle(input).font;
-    span.textContent = input.value || input.placeholder;
-
-    document.body.appendChild(span);
-    const width = span.getBoundingClientRect().width;
-    document.body.removeChild(span);
-
-    // Add padding and border to the width
-    const finalWidth = Math.max(150, width + 20); // 20px for padding and border
-    input.style.width = finalWidth + "px";
-  }
-
   function handleAddFieldNames() {
     const schemaData = schemaTable.getData().filter((row) => row[0]);
     const fieldNames = schemaData.map((row) => row[0]);
@@ -502,7 +599,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   
       // Table name format warning (not blocking)
       if (!tableName.includes(".")) {
-        showWarning("Warning: Table name format should be 'schema_name.table_name'.");
+        throw new Error("Table name format should be 'schema_name.table_name'.");
       }
   
       // Generate the query
@@ -540,7 +637,289 @@ export function initQuickQuery(container, updateHeaderTitle) {
     warningMessagesDiv.style.display = "none";
   }
 
-  // Helper Functions
+  // Schema Management Functions
+  function createSchemaOverlay() {
+    // Get elements
+    const overlay = document.getElementById("schemaOverlay");
+    const closeButton = document.getElementById("closeSchemaOverlay");
+    const showButton = document.getElementById("showSavedSchemas");
+    const exportButton = document.getElementById("exportSchemas");
+    const clearAllButton = document.getElementById("clearAllSchemas");
+
+    // Show overlay
+    showButton.addEventListener("click", () => {
+      overlay.classList.remove("hidden");
+      updateSavedSchemasList();
+    });
+
+    // Close overlay
+    closeButton.addEventListener("click", () => {
+      overlay.classList.add("hidden");
+    });
+
+    // Close on click outside modal
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        overlay.classList.add("hidden");
+      }
+    });
+
+    // Export button
+    exportButton.addEventListener("click", () => {
+      const allTables = getAllTables();
+      if (allTables.length === 0) {
+        showError("No schemas to export");
+        return;
+      }
+      exportSchemas();
+    });
+
+    // Clear All button
+    clearAllButton.addEventListener("click", () => {
+      const allTables = getAllTables();
+      if (allTables.length === 0) {
+        showError("No schemas to clear");
+        return;
+      }
+
+      if (
+        confirm(
+          "Are you sure you want to clear all saved schemas? This cannot be undone."
+        )
+      ) {
+        clearAllSchemas();
+      }
+    });
+
+    // Set up import functionality
+    setupSchemaImport();
+  }
+
+  function updateSavedSchemasList() {
+    const schemasList = document.getElementById('savedSchemasList');
+    const allTables = getAllTables();
+    
+    if (allTables.length === 0) {
+      schemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
+      return;
+    }
+    
+    // Group by schema
+    const groupedTables = allTables.reduce((groups, table) => {
+      if (!groups[table.schemaName]) {
+        groups[table.schemaName] = [];
+      }
+      groups[table.schemaName].push(table);
+      return groups;
+    }, {});
+    
+    // Clear existing content
+    schemasList.innerHTML = '';
+    
+    // Create and append elements
+    Object.entries(groupedTables).forEach(([schemaName, tables]) => {
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'schema-group';
+      
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'schema-group-header';
+      headerDiv.textContent = schemaName;
+      groupDiv.appendChild(headerDiv);
+      
+      tables.forEach(table => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'schema-item';
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'schema-info';
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'schema-name';
+        nameDiv.textContent = table.tableName;
+        
+        const timestampDiv = document.createElement('div');
+        timestampDiv.className = 'schema-timestamp';
+        timestampDiv.textContent = new Date(table.timestamp).toLocaleString();
+        
+        infoDiv.appendChild(nameDiv);
+        infoDiv.appendChild(timestampDiv);
+        
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'schema-actions';
+        
+        // Load button
+        const loadBtn = document.createElement('button');
+        loadBtn.textContent = 'Load';
+        loadBtn.addEventListener('click', () => handleLoadSchema(table.fullName));
+        
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => handleDeleteSchema(table.fullName));
+        
+        actionsDiv.appendChild(loadBtn);
+        actionsDiv.appendChild(deleteBtn);
+        
+        itemDiv.appendChild(infoDiv);
+        itemDiv.appendChild(actionsDiv);
+        groupDiv.appendChild(itemDiv);
+      });
+      
+      schemasList.appendChild(groupDiv);
+    });
+  }
+  
+  function handleLoadSchema(fullName) {
+    const schema = loadSchema(fullName);
+    if (schema) {
+      document.getElementById('tableNameInput').value = fullName;
+      schemaTable.loadData(schema);
+      updateDataSpreadsheet();
+      
+      // Close the overlay after loading
+      document.getElementById('schemaOverlay').classList.add('hidden');
+      
+      // Clear any existing error messages
+      clearError();
+    } else {
+      showError(`Failed to load schema for ${fullName}`);
+    }
+  }
+  
+  function handleDeleteSchema(fullName) {
+    if (confirm(`Delete schema for ${fullName}?`)) {
+      const deleted = deleteSchema(fullName);
+      if (deleted) {
+        updateSavedSchemasList();
+        
+        // If the deleted schema was the current one, clear the input
+        const currentTable = document.getElementById('tableNameInput').value;
+        if (currentTable === fullName) {
+          handleClearAll();
+        }
+      } else {
+        showError(`Failed to delete schema for ${fullName}`);
+      }
+    }
+  }
+
+  function clearAllSchemas() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      updateSavedSchemasList();
+      showError('All saved schemas have been cleared');
+      
+      // If current schema is loaded, clear it too
+      handleClearAll();
+      
+      return true;
+    } catch (error) {
+      console.error('Error clearing schemas:', error);
+      showError('Failed to clear schemas');
+      return false;
+    }
+  }
+
+  function setupSchemaImport() {
+    const importButton = document.getElementById('importSchemas');
+    const fileInput = document.getElementById('schemaFileInput');
+    
+    importButton.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        const jsonData = JSON.parse(text);
+        
+        // Validate schema format
+        if (!isValidSchemaFormat(jsonData)) {
+          throw new Error('Invalid schema format');
+        }
+        
+        // Import schemas
+        let importCount = 0;
+        
+        // Process each schema and its tables
+        Object.entries(jsonData).forEach(([schemaName, tables]) => {
+          Object.entries(tables).forEach(([tableName, schema]) => {
+            const fullTableName = `${schemaName}.${tableName}`;
+            if (saveSchema(fullTableName, schema)) {
+              importCount++;
+            }
+          });
+        });
+        
+        // Update UI
+        updateSavedSchemasList();
+        showError(`Successfully imported ${importCount} table schemas`);
+        // clear after 3 seconds
+        setTimeout(() => clearError(), 3000);
+        
+      } catch (error) {
+        showError(`Failed to import schemas: ${error.message}`);
+      } finally {
+        fileInput.value = ''; // Reset file input
+      }
+    });
+  }
+
+  function isValidSchemaFormat(data) {
+    if (!data || typeof data !== 'object') return false;
+    
+    return Object.entries(data).every(([schemaName, tables]) => {
+      if (typeof tables !== 'object') return false;
+      
+      return Object.entries(tables).every(([tableName, schema]) => {
+        return Array.isArray(schema) && 
+               schema.every(row => 
+                 Array.isArray(row) && 
+                 row.length >= 3 && // At least name, type, and nullable
+                 typeof row[0] === 'string' && 
+                 typeof row[1] === 'string' && 
+                 typeof row[2] === 'string'
+               );
+      });
+    });
+  }
+
+  function exportSchemas() {
+    const allTables = getAllTables();
+    const exportData = {};
+
+    // Group by schema and table
+    allTables.forEach((table) => {
+      const schema = loadSchema(table.fullName);
+      if (schema) {
+        // Initialize schema if needed
+        if (!exportData[table.schemaName]) {
+          exportData[table.schemaName] = {};
+        }
+
+        // Add table schema
+        exportData[table.schemaName][table.tableName] = schema;
+      }
+    });
+
+    // Create and download file
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "quick_query_saved_schemas.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Quick Query Functions
   function adjustDbeaverSchema(schemaData) {
     // Check if it's a DBeaver schema format
     console.log("Adjusting schema data");
@@ -717,6 +1096,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     // 1. Validate schema
     validateSchema(schemaData);
     console.log("Schema validated");
+    saveSchema(tableName, schemaData); // Save schema to local storage 
   
     // 2. Match schema and data fields
     matchSchemaWithData(schemaData, inputData);
@@ -1366,32 +1746,34 @@ export function initQuickQuery(container, updateHeaderTitle) {
               <input type="text" id="tableNameInput" placeholder="schema_name.table_name" value="schema_name.table_name">
               </div>
               <div class="button-group quick-query-left-controls">
-              <button id="addNewSchemaRow">Add row</button>
-              <button id="removeLastSchemaRow">Remove last row</button>
-              <button id="clearAll">Clear</button>
-              <button id="generateQuery">Generate Query</button>
-            </div>
-            <div id="spreadsheet-schema"></div>
-            <div id="guideContainer">
-              <button id="toggleGuide" class="toggle-guide">Tutorial & Simulation</button>
-              <div id="guide" class="guide-content hidden">
-                <h4>Quick Guide:</h4>
-                <ul>
-                  <li>Copy and paste your database schema.</li>
-                  <li>Use "PK" in the Nullable field to indicate Primary Keys. If no "PK" is stated, default PK would be field[0].</li>
-                  <li>You can have multiple primary keys.</li>
-                  <li>Fill in the Data Input with your values.</li>
-                  <li>Click buttons below to simulate the query generation.</li>
-                </ul>
-                <div class = "button-group simulate-buttons">
-                  <button id="simulationFillSchemaButton" class="simulate-button">1. Fill Schema</button>
-                  <p>&rarr;</p>
-                  <button id="simulationFillDataButton" class="simulate-button">2. Fill Data</button>
-                  <p>&rarr;</p>
-                  <button id="simulationGenerateQueryButton" class="simulate-button">3. Generate Query</button>
+                <button id="showSavedSchemas">Manage Saved Schemas</button>
+                <button id="addNewSchemaRow">Add row</button>
+                <button id="removeLastSchemaRow">Remove last row</button>
+                <button id="clearAll">Clear</button>
+                <button id="generateQuery">Generate Query</button>
+              </div>
+
+              <div id="spreadsheet-schema"></div>
+              <div id="guideContainer">
+                <button id="toggleGuide" class="toggle-guide">Tutorial & Simulation</button>
+                <div id="guide" class="guide-content hidden">
+                  <h4>Quick Guide:</h4>
+                  <ul>
+                    <li>Copy and paste your database schema.</li>
+                    <li>Use "PK" in the Nullable field to indicate Primary Keys. If no "PK" is stated, default PK would be field[0].</li>
+                    <li>You can have multiple primary keys.</li>
+                    <li>Fill in the Data Input with your values.</li>
+                    <li>Click buttons below to simulate the query generation.</li>
+                  </ul>
+                  <div class = "button-group simulate-buttons">
+                    <button id="simulationFillSchemaButton" class="simulate-button">1. Fill Schema</button>
+                    <p>&rarr;</p>
+                    <button id="simulationFillDataButton" class="simulate-button">2. Fill Data</button>
+                    <p>&rarr;</p>
+                    <button id="simulationGenerateQueryButton" class="simulate-button">3. Generate Query</button>
+                  </div>
                 </div>
               </div>
-            </div>
           </div>
           <div class="quick-query-right-panel">
             <div class="button-group quick-query-right-controls">
@@ -1415,6 +1797,24 @@ export function initQuickQuery(container, updateHeaderTitle) {
             </div>
           </div>
           <div id="spreadsheet-data"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="schemaOverlay" class="schema-overlay hidden">
+      <div class="schema-modal">
+        <div class="schema-modal-header">
+          <h3>Saved Schemas</h3>
+          <div class="schema-modal-actions">
+            <button id="clearAllSchemas" class="action-button">Clear All</button>
+            <button id="exportSchemas" class="action-button">Export</button>
+            <button id="importSchemas" class="action-button">Import</button>
+            <button id="closeSchemaOverlay" class="overlay-close-button">&times;</button>
+          </div>
+          <input type="file" id="schemaFileInput" accept=".json" style="display: none;">
+        </div>
+        <div class="schema-modal-content">
+          <div id="savedSchemasList"></div>
         </div>
       </div>
     </div>
@@ -1512,18 +1912,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       handler: handleRemoveLastSchemaRow
     },
     
-    // Input handlers
-    'tableNameInput': [
-      {
-        event: 'input',
-        handler: handleTableNameWidthAdjustment
-      },
-      {
-        event: 'change',
-        handler: handleTableNameWidthAdjustment
-      }
-    ],
-    
     // Select handlers
     'queryTypeSelect': {
       event: 'change',
@@ -1597,10 +1985,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     try {
       // Set up initial HTML
       container.innerHTML = MAIN_HTML_PAGE;
-
-      // Clear any existing errors
       clearError();
-      handleTableNameWidthAdjustment();
 
       // Single initialization flow with retry logic
       retryOperation(
@@ -1610,6 +1995,19 @@ export function initQuickQuery(container, updateHeaderTitle) {
               initializeSchemaTable();
               initializeEditor();
               setupEventListeners();
+
+              // Try to load most recent schema from local storage
+              const allTables = getAllTables();
+              if (allTables.length > 0) {
+                const mostRecent = allTables[0];
+                const schema = loadSchema(mostRecent.fullName);
+                if (schema) {
+                  document.getElementById('tableNameInput').value = mostRecent.fullName;
+                  schemaTable.loadData(schema);
+                  updateDataSpreadsheet();
+                }
+              }
+              createSchemaOverlay();
               resolveOp();
             })
             .catch(rejectOp);

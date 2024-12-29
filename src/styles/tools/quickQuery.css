@@ -108,6 +108,7 @@
 
 #guideContainer {
   margin-top: 16px;
+  visibility: hidden;
 }
 
 .toggle-guide {
@@ -181,7 +182,8 @@
 }
 
 #tableNameInput {
-  width: auto;
+  width: 100%;
+  max-width: 486px;
   min-width: 0;
   padding: 4px 8px;
   box-sizing: border-box;
@@ -259,4 +261,126 @@ input:-webkit-autofill-selected {
 .quick-query-error-state .retry-button:disabled {
   background-color: #9ca3af;
   cursor: not-allowed;
+}
+
+
+/* Schema Management */
+
+.schema-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.schema-overlay.hidden {
+  display: none;
+}
+
+.schema-modal {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.schema-modal-header {
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.schema-modal-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.overlay-close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 8px;
+  color:red;
+  background-color: white;
+}
+
+.overlay-close-button:hover {
+  background-color: white;
+}
+
+.schema-modal-content {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: calc(80vh - 70px); /* Account for header */
+}
+
+.schema-group {
+  margin-bottom: 16px;
+}
+
+.schema-group-header {
+  background: #f5f5f5;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.schema-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.schema-info {
+  flex-grow: 1;
+}
+
+.schema-name {
+  font-weight: 500;
+}
+
+.schema-timestamp {
+  font-size: 0.85em;
+  color: #666;
+}
+
+.schema-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.schema-actions button {
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: var(--text-color);
+}
+
+.schema-actions button:hover {
+  background: var(--accent-color);
+}
+
+.no-schemas {
+  text-align: center;
+  padding: 24px;
+  color: #666;
+  font-style: italic;
 }
