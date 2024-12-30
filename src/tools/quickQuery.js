@@ -5,8 +5,8 @@ function retryOperation(operation, options = {}) {
     retries = 3,
     delay = 1000,
     backoff = 2,
-    name = 'Operation',
-    onFailedAttempt = null
+    name = "Operation",
+    onFailedAttempt = null,
   } = options;
 
   return new Promise((resolve, reject) => {
@@ -14,21 +14,25 @@ function retryOperation(operation, options = {}) {
 
     function tryOperation() {
       operation()
-        .then(result => {
+        .then((result) => {
           if (attempt > 0) {
             console.log(`${name} succeeded on attempt ${attempt + 1}`);
           }
           resolve(result);
         })
-        .catch(error => {
+        .catch((error) => {
           if (attempt < retries - 1) {
             const waitTime = delay * Math.pow(backoff, attempt);
-            console.warn(`${name} failed, attempt ${attempt + 1}/${retries}. Retrying in ${waitTime}ms...`);
-            
+            console.warn(
+              `${name} failed, attempt ${
+                attempt + 1
+              }/${retries}. Retrying in ${waitTime}ms...`
+            );
+
             if (onFailedAttempt) {
               onFailedAttempt(error, attempt + 1, retries);
             }
-            
+
             attempt++;
             setTimeout(tryOperation, waitTime);
           } else {
@@ -42,16 +46,18 @@ function retryOperation(operation, options = {}) {
   });
 }
 
-const STORAGE_KEY = 'quickquery_schemas';
+const STORAGE_KEY = "quickquery_schemas";
 const ORACLE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_$#]*$/;
 const MAX_SCHEMA_LENGTH = 30;
 const MAX_TABLE_LENGTH = 128;
 
 // Storage Helper Functions
 function parseTableIdentifier(fullTableName) {
-  const [schemaName, tableName] = fullTableName.split('.');
+  const [schemaName, tableName] = fullTableName.split(".");
   if (!schemaName || !tableName) {
-    throw new Error('Invalid table name format. Expected "schema_name.table_name"');
+    throw new Error(
+      'Invalid table name format. Expected "schema_name.table_name"'
+    );
   }
   return { schemaName, tableName };
 }
@@ -62,15 +68,15 @@ function getStorageData() {
     if (!data) {
       return {
         schemas: {},
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
     }
     return JSON.parse(data);
   } catch (error) {
-    console.error('Error reading storage:', error);
+    console.error("Error reading storage:", error);
     return {
       schemas: {},
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
     };
   }
 }
@@ -81,7 +87,7 @@ function saveStorageData(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     return true;
   } catch (error) {
-    console.error('Error saving to storage:', error);
+    console.error("Error saving to storage:", error);
     return false;
   }
 }
@@ -98,12 +104,12 @@ function saveSchema(fullTableName, schemaData) {
 
     storageData.schemas[schemaName].tables[tableName] = {
       schema: schemaData,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     return saveStorageData(storageData);
   } catch (error) {
-    console.error('Error saving schema:', error);
+    console.error("Error saving schema:", error);
     return false;
   }
 }
@@ -114,7 +120,7 @@ function loadSchema(fullTableName) {
     const storageData = getStorageData();
     return storageData.schemas[schemaName]?.tables[tableName]?.schema || null;
   } catch (error) {
-    console.error('Error loading schema:', error);
+    console.error("Error loading schema:", error);
     return null;
   }
 }
@@ -126,7 +132,7 @@ function deleteSchema(fullTableName) {
 
     if (storageData.schemas[schemaName]?.tables[tableName]) {
       delete storageData.schemas[schemaName].tables[tableName];
-      
+
       if (Object.keys(storageData.schemas[schemaName].tables).length === 0) {
         delete storageData.schemas[schemaName];
       }
@@ -135,7 +141,7 @@ function deleteSchema(fullTableName) {
     }
     return false;
   } catch (error) {
-    console.error('Error deleting schema:', error);
+    console.error("Error deleting schema:", error);
     return false;
   }
 }
@@ -151,13 +157,13 @@ function getAllTables() {
         fullName: `${schemaName}.${tableName}`,
         schemaName,
         tableName,
-        timestamp: tableData.timestamp
+        timestamp: tableData.timestamp,
       });
     });
   });
 
-  return allTables.sort((a, b) => 
-    new Date(b.timestamp) - new Date(a.timestamp)
+  return allTables.sort(
+    (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
   );
 }
 
@@ -166,27 +172,31 @@ function getByteLength(str) {
   return new TextEncoder().encode(str).length;
 }
 
-function validateOracleName(name, type = 'schema') {
+function validateOracleName(name, type = "schema") {
   if (!name) return false;
-  
+
   // Check if name starts with a letter and contains only valid characters
   if (!ORACLE_NAME_REGEX.test(name)) return false;
-  
+
   // Check length based on type
   const byteLength = getByteLength(name);
-  if (type === 'schema' && byteLength > MAX_SCHEMA_LENGTH) return false;
-  if (type === 'table' && byteLength > MAX_TABLE_LENGTH) return false;
-  
+  if (type === "schema" && byteLength > MAX_SCHEMA_LENGTH) return false;
+  if (type === "table" && byteLength > MAX_TABLE_LENGTH) return false;
+
   return true;
 }
 
 function sqlLikeToRegex(pattern) {
-  return new RegExp('^' + pattern
-    .replace(/%/g, '.*')
-    .replace(/_/g, '.')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    + '$', 'i');
+  return new RegExp(
+    "^" +
+      pattern
+        .replace(/%/g, ".*")
+        .replace(/_/g, ".")
+        .replace(/\[/g, "\\[")
+        .replace(/\]/g, "\\]") +
+      "$",
+    "i"
+  );
 }
 
 function searchSavedSchemas(searchTerm) {
@@ -194,79 +204,87 @@ function searchSavedSchemas(searchTerm) {
   if (!searchTerm) return allTables;
 
   // Split into schema and table parts
-  let [schemaSearch, tableSearch] = searchTerm.split('.');
-  
+  let [schemaSearch, tableSearch] = searchTerm.split(".");
+
   // DBeaver-style search behavior:
   // 1. Before dot: search term can match either schema OR table name
   // 2. After dot: only search tables within matched schemas
-  
+
   if (!tableSearch) {
     // No dot - search both schema and table names
     const searchPattern = `%${schemaSearch}%`;
     const pattern = sqlLikeToRegex(searchPattern);
-    
-    return allTables.filter(table => 
-      pattern.test(table.schemaName) || pattern.test(table.tableName)
-    ).sort((a, b) => {
-      // Sort by relevance:
-      // 1. Schema exact match
-      // 2. Table exact match
-      // 3. Schema starts with
-      // 4. Table starts with
-      // 5. Contains
-      const termLower = schemaSearch.toLowerCase();
-      const schemaA = a.schemaName.toLowerCase();
-      const schemaB = b.schemaName.toLowerCase();
-      const tableA = a.tableName.toLowerCase();
-      const tableB = b.tableName.toLowerCase();
 
-      function getScore(schema, table) {
-        if (schema === termLower) return 5;
-        if (table === termLower) return 4;
-        if (schema.startsWith(termLower)) return 3;
-        if (table.startsWith(termLower)) return 2;
-        return 1;
-      }
+    return allTables
+      .filter(
+        (table) =>
+          pattern.test(table.schemaName) || pattern.test(table.tableName)
+      )
+      .sort((a, b) => {
+        // Sort by relevance:
+        // 1. Schema exact match
+        // 2. Table exact match
+        // 3. Schema starts with
+        // 4. Table starts with
+        // 5. Contains
+        const termLower = schemaSearch.toLowerCase();
+        const schemaA = a.schemaName.toLowerCase();
+        const schemaB = b.schemaName.toLowerCase();
+        const tableA = a.tableName.toLowerCase();
+        const tableB = b.tableName.toLowerCase();
 
-      const scoreA = getScore(schemaA, tableA);
-      const scoreB = getScore(schemaB, tableB);
+        function getScore(schema, table) {
+          if (schema === termLower) return 5;
+          if (table === termLower) return 4;
+          if (schema.startsWith(termLower)) return 3;
+          if (table.startsWith(termLower)) return 2;
+          return 1;
+        }
 
-      return scoreB - scoreA || schemaA.localeCompare(schemaB);
-    });
+        const scoreA = getScore(schemaA, tableA);
+        const scoreB = getScore(schemaB, tableB);
+
+        return scoreB - scoreA || schemaA.localeCompare(schemaB);
+      });
   } else {
     // Has dot - first find matching schemas, then filter tables
     const schemaPattern = sqlLikeToRegex(`%${schemaSearch}%`);
     const tablePattern = sqlLikeToRegex(`%${tableSearch}%`);
-    
+
     // Find all schemas that match the pattern
     const matchingSchemas = new Set(
       allTables
-        .filter(table => schemaPattern.test(table.schemaName))
-        .map(table => table.schemaName)
+        .filter((table) => schemaPattern.test(table.schemaName))
+        .map((table) => table.schemaName)
     );
-    
+
     // Filter tables in matching schemas
     return allTables
-      .filter(table => 
-        matchingSchemas.has(table.schemaName) && 
-        tablePattern.test(table.tableName)
+      .filter(
+        (table) =>
+          matchingSchemas.has(table.schemaName) &&
+          tablePattern.test(table.tableName)
       )
       .sort((a, b) => {
         // Sort by schema match first, then table match
-        const schemaScoreA = schemaSearch.toLowerCase() === a.schemaName.toLowerCase() ? 1 : 0;
-        const schemaScoreB = schemaSearch.toLowerCase() === b.schemaName.toLowerCase() ? 1 : 0;
-        
+        const schemaScoreA =
+          schemaSearch.toLowerCase() === a.schemaName.toLowerCase() ? 1 : 0;
+        const schemaScoreB =
+          schemaSearch.toLowerCase() === b.schemaName.toLowerCase() ? 1 : 0;
+
         if (schemaScoreA !== schemaScoreB) {
           return schemaScoreB - schemaScoreA;
         }
-        
-        const tableScoreA = tableSearch.toLowerCase() === a.tableName.toLowerCase() ? 1 : 0;
-        const tableScoreB = tableSearch.toLowerCase() === b.tableName.toLowerCase() ? 1 : 0;
-        
+
+        const tableScoreA =
+          tableSearch.toLowerCase() === a.tableName.toLowerCase() ? 1 : 0;
+        const tableScoreB =
+          tableSearch.toLowerCase() === b.tableName.toLowerCase() ? 1 : 0;
+
         if (tableScoreA !== tableScoreB) {
           return tableScoreB - tableScoreA;
         }
-        
+
         return a.tableName.localeCompare(b.tableName);
       });
   }
@@ -278,27 +296,27 @@ function setupTableNameSearch(parent) {
     dataTable,
     updateDataSpreadsheet,
     handleAddFieldNames,
-    clearError
+    clearError,
   } = parent;
 
-  const tableNameInput = document.getElementById('tableNameInput');
-  
+  const tableNameInput = document.getElementById("tableNameInput");
+
   // Disable browser's default suggestions
-  tableNameInput.setAttribute('autocomplete', 'off');
-  tableNameInput.setAttribute('autocorrect', 'off');
-  tableNameInput.setAttribute('autocapitalize', 'off');
-  tableNameInput.setAttribute('spellcheck', 'false');
-  
+  tableNameInput.setAttribute("autocomplete", "off");
+  tableNameInput.setAttribute("autocorrect", "off");
+  tableNameInput.setAttribute("autocapitalize", "off");
+  tableNameInput.setAttribute("spellcheck", "false");
+
   // Create a container div and wrap it around the input
-  const container = document.createElement('div');
-  container.className = 'table-search-container';
+  const container = document.createElement("div");
+  container.className = "table-search-container";
   tableNameInput.parentNode.insertBefore(container, tableNameInput);
   container.appendChild(tableNameInput);
-  
+
   // Create dropdown container
-  const dropdownContainer = document.createElement('div');
-  dropdownContainer.className = 'table-search-dropdown';
-  dropdownContainer.style.display = 'none';
+  const dropdownContainer = document.createElement("div");
+  dropdownContainer.className = "table-search-dropdown";
+  dropdownContainer.style.display = "none";
   container.appendChild(dropdownContainer);
 
   // Keep track of selected item
@@ -306,12 +324,12 @@ function setupTableNameSearch(parent) {
   let visibleItems = [];
 
   function showDropdown(results) {
-    dropdownContainer.innerHTML = '';
+    dropdownContainer.innerHTML = "";
     visibleItems = [];
     selectedIndex = -1;
-    
+
     if (results.length === 0) {
-      dropdownContainer.style.display = 'none';
+      dropdownContainer.style.display = "none";
       return;
     }
 
@@ -324,26 +342,26 @@ function setupTableNameSearch(parent) {
     }, {});
 
     Object.entries(groupedResults).forEach(([schemaName, tables]) => {
-      const schemaGroup = document.createElement('div');
-      schemaGroup.className = 'schema-group';
-      
-      const schemaHeader = document.createElement('div');
-      schemaHeader.className = 'schema-header';
+      const schemaGroup = document.createElement("div");
+      schemaGroup.className = "schema-group";
+
+      const schemaHeader = document.createElement("div");
+      schemaHeader.className = "schema-header";
       schemaHeader.textContent = schemaName;
       schemaGroup.appendChild(schemaHeader);
 
-      tables.forEach(table => {
-        const item = document.createElement('div');
-        item.className = 'search-result-item';
+      tables.forEach((table) => {
+        const item = document.createElement("div");
+        item.className = "search-result-item";
         item.textContent = table.tableName;
-        
+
         // Store the full table name for easy access
         item.dataset.fullName = table.fullName;
-        
+
         // Add to visible items array for keyboard navigation
         visibleItems.push(item);
-        
-        item.addEventListener('click', function() {
+
+        item.addEventListener("click", function () {
           selectResult(table.fullName);
         });
 
@@ -353,14 +371,14 @@ function setupTableNameSearch(parent) {
       dropdownContainer.appendChild(schemaGroup);
     });
 
-    dropdownContainer.style.display = 'block';
+    dropdownContainer.style.display = "block";
   }
 
   function selectResult(fullName) {
     // Set the input value
     tableNameInput.value = fullName;
-    dropdownContainer.style.display = 'none';
-    
+    dropdownContainer.style.display = "none";
+
     // Load the schema if it exists
     const schema = loadSchema(fullName);
     if (schema) {
@@ -379,46 +397,49 @@ function setupTableNameSearch(parent) {
   function updateSelection() {
     visibleItems.forEach((item, index) => {
       if (index === selectedIndex) {
-        item.classList.add('selected');
-        item.scrollIntoView({ block: 'nearest' });
+        item.classList.add("selected");
+        item.scrollIntoView({ block: "nearest" });
       } else {
-        item.classList.remove('selected');
+        item.classList.remove("selected");
       }
     });
   }
 
   function handleKeyDown(event) {
-    if (dropdownContainer.style.display === 'none' && event.key === 'ArrowDown') {
+    if (
+      dropdownContainer.style.display === "none" &&
+      event.key === "ArrowDown"
+    ) {
       // If dropdown is hidden and down arrow is pressed, show recent items
-      const results = searchSavedSchemas('').slice(0, 7); // Get 7 most recent
+      const results = searchSavedSchemas("").slice(0, 7); // Get 7 most recent
       showDropdown(results);
       selectedIndex = -1;
       return;
     }
 
-    if (dropdownContainer.style.display === 'block') {
+    if (dropdownContainer.style.display === "block") {
       switch (event.key) {
-        case 'ArrowDown':
+        case "ArrowDown":
           event.preventDefault();
           selectedIndex = Math.min(selectedIndex + 1, visibleItems.length - 1);
           updateSelection();
           break;
 
-        case 'ArrowUp':
+        case "ArrowUp":
           event.preventDefault();
           selectedIndex = Math.max(selectedIndex - 1, -1);
           updateSelection();
           break;
 
-        case 'Enter':
+        case "Enter":
           event.preventDefault();
           if (selectedIndex >= 0 && selectedIndex < visibleItems.length) {
             selectResult(visibleItems[selectedIndex].dataset.fullName);
           }
           break;
 
-        case 'Escape':
-          dropdownContainer.style.display = 'none';
+        case "Escape":
+          dropdownContainer.style.display = "none";
           selectedIndex = -1;
           break;
       }
@@ -427,35 +448,35 @@ function setupTableNameSearch(parent) {
 
   function handleInput(event) {
     const input = event.target.value.trim();
-    
+
     // Clear any previous error styling
-    tableNameInput.style.borderColor = '';
-    
+    tableNameInput.style.borderColor = "";
+
     if (!input) {
       // Show recent items if input is empty
-      const results = searchSavedSchemas('').slice(0, 7); // Get 7 most recent
+      const results = searchSavedSchemas("").slice(0, 7); // Get 7 most recent
       showDropdown(results);
       return;
     }
 
-    const parts = input.split('.');
-    
+    const parts = input.split(".");
+
     // Validate each part
     if (parts.length > 1) {
       const [schema, table] = parts;
-      const isValidSchema = validateOracleName(schema, 'schema');
-      const isValidTable = table ? validateOracleName(table, 'table') : true;
-      
+      const isValidSchema = validateOracleName(schema, "schema");
+      const isValidTable = table ? validateOracleName(table, "table") : true;
+
       if (!isValidSchema || !isValidTable) {
-        tableNameInput.style.borderColor = 'red';
-        dropdownContainer.style.display = 'none';
+        tableNameInput.style.borderColor = "red";
+        dropdownContainer.style.display = "none";
         return;
       }
     } else {
-      const isValidSchema = validateOracleName(parts[0], 'schema');
+      const isValidSchema = validateOracleName(parts[0], "schema");
       if (!isValidSchema) {
-        tableNameInput.style.borderColor = 'red';
-        dropdownContainer.style.display = 'none';
+        tableNameInput.style.borderColor = "red";
+        dropdownContainer.style.display = "none";
         return;
       }
     }
@@ -465,26 +486,25 @@ function setupTableNameSearch(parent) {
   }
 
   // Event Listeners
-  tableNameInput.addEventListener('input', handleInput);
-  tableNameInput.addEventListener('keydown', handleKeyDown);
-  
+  tableNameInput.addEventListener("input", handleInput);
+  tableNameInput.addEventListener("keydown", handleKeyDown);
+
   // Close dropdown when clicking outside
-  document.addEventListener('click', (event) => {
+  document.addEventListener("click", (event) => {
     if (!container.contains(event.target)) {
-      dropdownContainer.style.display = 'none';
+      dropdownContainer.style.display = "none";
       selectedIndex = -1;
     }
   });
 }
 
 export function initQuickQuery(container, updateHeaderTitle) {
-
   const parent = {
     schemaTable: null,
     dataTable: null,
     updateDataSpreadsheet: null,
     handleAddFieldNames: null,
-    clearError: null
+    clearError: null,
   };
 
   // Business Logics
@@ -805,31 +825,31 @@ export function initQuickQuery(container, updateHeaderTitle) {
   // function handleSimulationFillSchema() {
   //   // Fill the table name input with a complex case
   //   document.getElementById("tableNameInput").value = "edge_Test.TABLE_123";
-  
+
   //   // Edge test cases for schema
   //   const testSchema = [
   //     // Test case: Mixed case field names and special characters
   //     ["Field_NAME_1", "VARCHAR2(50)", "PK", "", "1", "Test PK field"],
-      
+
   //     // Test case: Number field with maximum precision and scale
   //     ["amount_2", "NUMBER(38,10)", "No", "0", "2", "Max Oracle number"],
-      
+
   //     // Test case: Nullable field with default
   //     ["description", "VARCHAR2(4000)", "Yes", "'N/A'", "3", "Max VARCHAR2"],
-      
+
   //     // Test case: Boolean/Flag field
   //     ["is_active_FLAG", "NUMBER(1,0)", "No", "1", "4", "Boolean field"],
-      
+
   //     // Test case: Reserved word as field name
   //     ["\"TABLE\"", "VARCHAR2(100)", "No", "", "5", "Reserved word"],
-      
+
   //     // Test case: Timestamp with timezone
   //     ["event_time", "TIMESTAMP(9) WITH TIME ZONE", "No", "SYSDATE", "6", "Max precision"],
-      
+
   //     // Test case: CLOB type
   //     ["large_text", "CLOB", "Yes", "", "7", "CLOB field"]
   //   ];
-  
+
   //   schemaTable.loadData(testSchema);
   // }
 
@@ -838,7 +858,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   //   const testData = [
   //     // Header row - mixed case and special characters
   //     ["Field_NAME_1", "amount_2", "description", "is_active_FLAG", "\"TABLE\"", "event_time", "large_text"],
-      
+
   //     // Row 1: Testing maximum values and special cases
   //     [
   //       "ABC123!@#$", // PK with special chars
@@ -849,7 +869,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   //       "2024-12-31 23:59:59.999999999 +00:00", // Max timestamp
   //       "Very long CLOB text..." // CLOB content
   //     ],
-      
+
   //     // Row 2: Testing minimum/edge values
   //     [
   //       "", // Empty PK (should trigger error)
@@ -860,7 +880,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   //       "", // Empty timestamp (should use SYSDATE)
   //       "" // Empty CLOB
   //     ],
-      
+
   //     // Row 3: Testing special characters and formats
   //     [
   //       "PK''QUOTE", // Single quote in PK
@@ -872,7 +892,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   //       "<?xml version=\"1.0\"?><root>TEST</root>" // XML in CLOB
   //     ]
   //   ];
-  
+
   //   dataTable.loadData(testData);
   //   updateDataSpreadsheet();
   // }
@@ -992,26 +1012,28 @@ export function initQuickQuery(container, updateHeaderTitle) {
       // Get input data
       const tableName = document.getElementById("tableNameInput").value.trim();
       const queryType = document.getElementById("queryTypeSelect").value;
-      
+
       // Get schema data (removing empty rows)
-      const schemaData = schemaTable.getData().filter(row => row[0]); 
-      
+      const schemaData = schemaTable.getData().filter((row) => row[0]);
+
       // Get input data (all rows including headers)
       const inputData = dataTable.getData();
-  
+
       // Handle empty table name
       if (!tableName) {
         throw new Error("Please fill in schema_name.table_name.");
       }
-  
+
       // Table name format warning (not blocking)
       if (!tableName.includes(".")) {
-        throw new Error("Table name format should be 'schema_name.table_name'.");
+        throw new Error(
+          "Table name format should be 'schema_name.table_name'."
+        );
       }
-  
+
       // Generate the query
       const query = generateQuery(tableName, queryType, schemaData, inputData);
-      
+
       // Update editor with generated query
       editor.setValue(query);
       clearError();
@@ -1104,14 +1126,14 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function updateSavedSchemasList() {
-    const schemasList = document.getElementById('savedSchemasList');
+    const schemasList = document.getElementById("savedSchemasList");
     const allTables = getAllTables();
-    
+
     if (allTables.length === 0) {
       schemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
       return;
     }
-    
+
     // Group by schema
     const groupedTables = allTables.reduce((groups, table) => {
       if (!groups[table.schemaName]) {
@@ -1120,93 +1142,94 @@ export function initQuickQuery(container, updateHeaderTitle) {
       groups[table.schemaName].push(table);
       return groups;
     }, {});
-    
+
     // Clear existing content
-    schemasList.innerHTML = '';
-    
+    schemasList.innerHTML = "";
+
     // Create and append elements
     Object.entries(groupedTables).forEach(([schemaName, tables]) => {
-      const groupDiv = document.createElement('div');
-      groupDiv.className = 'schema-group';
-      
-      const headerDiv = document.createElement('div');
-      headerDiv.className = 'schema-group-header';
+      const groupDiv = document.createElement("div");
+      groupDiv.className = "schema-group";
+
+      const headerDiv = document.createElement("div");
+      headerDiv.className = "schema-group-header";
       headerDiv.textContent = schemaName;
       groupDiv.appendChild(headerDiv);
-      
-      tables.forEach(table => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'schema-item';
-        
-        const infoDiv = document.createElement('div');
-        infoDiv.className = 'schema-info';
-        
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'schema-name';
+
+      tables.forEach((table) => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "schema-item";
+
+        const infoDiv = document.createElement("div");
+        infoDiv.className = "schema-info";
+
+        const nameDiv = document.createElement("div");
+        nameDiv.className = "schema-name";
         nameDiv.textContent = table.tableName;
-        
-        const timestampDiv = document.createElement('div');
-        timestampDiv.className = 'schema-timestamp';
+
+        const timestampDiv = document.createElement("div");
+        timestampDiv.className = "schema-timestamp";
         timestampDiv.textContent = new Date(table.timestamp).toLocaleString();
-        
+
         infoDiv.appendChild(nameDiv);
         infoDiv.appendChild(timestampDiv);
-        
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'schema-actions';
-        
+
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "schema-actions";
+
         // Load button
-        const loadBtn = document.createElement('button');
-        loadBtn.textContent = 'Load';
-        loadBtn.addEventListener('click', () => handleLoadSchema(table.fullName));
-        
+        const loadBtn = document.createElement("button");
+        loadBtn.textContent = "Load";
+        loadBtn.addEventListener("click", () =>
+          handleLoadSchema(table.fullName)
+        );
+
         // Delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.addEventListener('click', () => handleDeleteSchema(table.fullName));
-        
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.addEventListener("click", () =>
+          handleDeleteSchema(table.fullName)
+        );
+
         actionsDiv.appendChild(loadBtn);
         actionsDiv.appendChild(deleteBtn);
-        
+
         itemDiv.appendChild(infoDiv);
         itemDiv.appendChild(actionsDiv);
         groupDiv.appendChild(itemDiv);
       });
-      
+
       schemasList.appendChild(groupDiv);
     });
   }
-  
+
   function handleLoadSchema(fullName) {
     const schema = loadSchema(fullName);
     if (schema) {
-      document.getElementById('tableNameInput').value = fullName;
+      document.getElementById("tableNameInput").value = fullName;
       schemaTable.loadData(schema);
       dataTable.loadData([[], []]);
       updateDataSpreadsheet();
       handleAddFieldNames();
-      
-      
-      // Close the overlay after loading
-      document.getElementById('schemaOverlay').classList.add('hidden');
 
-      
-      
+      // Close the overlay after loading
+      document.getElementById("schemaOverlay").classList.add("hidden");
+
       // Clear any existing error messages
       clearError();
     } else {
       showError(`Failed to load schema for ${fullName}`);
     }
   }
-  
+
   function handleDeleteSchema(fullName) {
     if (confirm(`Delete schema for ${fullName}?`)) {
       const deleted = deleteSchema(fullName);
       if (deleted) {
         updateSavedSchemasList();
-        
+
         // If the deleted schema was the current one, clear the input
-        const currentTable = document.getElementById('tableNameInput').value;
+        const currentTable = document.getElementById("tableNameInput").value;
         if (currentTable === fullName) {
           handleClearAll();
         }
@@ -1220,43 +1243,43 @@ export function initQuickQuery(container, updateHeaderTitle) {
     try {
       localStorage.removeItem(STORAGE_KEY);
       updateSavedSchemasList();
-      showError('All saved schemas have been cleared');
-      
+      showError("All saved schemas have been cleared");
+
       // If current schema is loaded, clear it too
       handleClearAll();
-      
+
       return true;
     } catch (error) {
-      console.error('Error clearing schemas:', error);
-      showError('Failed to clear schemas');
+      console.error("Error clearing schemas:", error);
+      showError("Failed to clear schemas");
       return false;
     }
   }
 
   function setupSchemaImport() {
-    const importButton = document.getElementById('importSchemas');
-    const fileInput = document.getElementById('schemaFileInput');
-    
-    importButton.addEventListener('click', () => {
+    const importButton = document.getElementById("importSchemas");
+    const fileInput = document.getElementById("schemaFileInput");
+
+    importButton.addEventListener("click", () => {
       fileInput.click();
     });
-    
-    fileInput.addEventListener('change', async (event) => {
+
+    fileInput.addEventListener("change", async (event) => {
       const file = event.target.files[0];
       if (!file) return;
-      
+
       try {
         const text = await file.text();
         const jsonData = JSON.parse(text);
-        
+
         // Validate schema format
         if (!isValidSchemaFormat(jsonData)) {
-          throw new Error('Invalid schema format');
+          throw new Error("Invalid schema format");
         }
-        
+
         // Import schemas
         let importCount = 0;
-        
+
         // Process each schema and its tables
         Object.entries(jsonData).forEach(([schemaName, tables]) => {
           Object.entries(tables).forEach(([tableName, schema]) => {
@@ -1266,36 +1289,38 @@ export function initQuickQuery(container, updateHeaderTitle) {
             }
           });
         });
-        
+
         // Update UI
         updateSavedSchemasList();
         showError(`Successfully imported ${importCount} table schemas`);
         // clear after 3 seconds
         setTimeout(() => clearError(), 3000);
-        
       } catch (error) {
         showError(`Failed to import schemas: ${error.message}`);
       } finally {
-        fileInput.value = ''; // Reset file input
+        fileInput.value = ""; // Reset file input
       }
     });
   }
 
   function isValidSchemaFormat(data) {
-    if (!data || typeof data !== 'object') return false;
-    
+    if (!data || typeof data !== "object") return false;
+
     return Object.entries(data).every(([schemaName, tables]) => {
-      if (typeof tables !== 'object') return false;
-      
+      if (typeof tables !== "object") return false;
+
       return Object.entries(tables).every(([tableName, schema]) => {
-        return Array.isArray(schema) && 
-               schema.every(row => 
-                 Array.isArray(row) && 
-                 row.length >= 3 && // At least name, type, and nullable
-                 typeof row[0] === 'string' && 
-                 typeof row[1] === 'string' && 
-                 typeof row[2] === 'string'
-               );
+        return (
+          Array.isArray(schema) &&
+          schema.every(
+            (row) =>
+              Array.isArray(row) &&
+              row.length >= 3 && // At least name, type, and nullable
+              typeof row[0] === "string" &&
+              typeof row[1] === "string" &&
+              typeof row[2] === "string"
+          )
+        );
       });
     });
   }
@@ -1451,7 +1476,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     ];
     return validTypes.some((type) => dataType.toUpperCase().startsWith(type));
   }
-  
+
   function isValidNullableDataType(nullable) {
     const validValues = [
       "Yes",
@@ -1469,40 +1494,58 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function matchSchemaWithData(schemaData, inputData) {
-    const hasSchemaData = schemaData.some(row => row.some(cell => cell !== null && cell !== ''));
-    const hasFieldNames = inputData[0]?.some(cell => cell !== null && cell !== '');
-    const hasFirstDataRow = inputData[1]?.some(cell => cell !== null && cell !== '');
-  
+    const hasSchemaData = schemaData.some((row) =>
+      row.some((cell) => cell !== null && cell !== "")
+    );
+    const hasFieldNames = inputData[0]?.some(
+      (cell) => cell !== null && cell !== ""
+    );
+    const hasFirstDataRow = inputData[1]?.some(
+      (cell) => cell !== null && cell !== ""
+    );
+
     if (!hasSchemaData || !hasFieldNames || !hasFirstDataRow) {
-      throw new Error('Incomplete data. Please fill in both schema and data sheets.');
-    }
-  
-    const schemaFieldNames = schemaData.map(row => row[0].toLowerCase());
-    const inputFieldNames = inputData[0].map(field => field?.toLowerCase());
-  
-    // Check for empty field names in data input
-    const emptyColumnIndex = inputFieldNames.findIndex(field => !field);
-    if (emptyColumnIndex !== -1) {
       throw new Error(
-        `Field Name Error:<br>Empty field name found in data input at column ${emptyColumnIndex + 1}`
+        "Incomplete data. Please fill in both schema and data sheets."
       );
     }
-  
+
+    const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
+    const inputFieldNames = inputData[0].map((field) => field?.toLowerCase());
+
+    // Check for empty field names in data input
+    const emptyColumnIndex = inputFieldNames.findIndex((field) => !field);
+    if (emptyColumnIndex !== -1) {
+      throw new Error(
+        `Field Name Error:<br>Empty field name found in data input at column ${
+          emptyColumnIndex + 1
+        }`
+      );
+    }
+
     // Find mismatches in both directions
-    const missingInSchema = inputFieldNames.filter(field => !schemaFieldNames.includes(field));
-    const missingInData = schemaFieldNames.filter(field => !inputFieldNames.includes(field));
-  
+    const missingInSchema = inputFieldNames.filter(
+      (field) => !schemaFieldNames.includes(field)
+    );
+    const missingInData = schemaFieldNames.filter(
+      (field) => !inputFieldNames.includes(field)
+    );
+
     if (missingInSchema.length > 0 || missingInData.length > 0) {
       const errors = [];
       if (missingInSchema.length > 0) {
-        errors.push(`Fields in data but not in schema: ${missingInSchema.join(", ")}`);
+        errors.push(
+          `Fields in data but not in schema: ${missingInSchema.join(", ")}`
+        );
       }
       if (missingInData.length > 0) {
-        errors.push(`Fields in schema but not in data: ${missingInData.join(", ")}`);
+        errors.push(
+          `Fields in schema but not in data: ${missingInData.join(", ")}`
+        );
       }
       throw new Error(`Field Mismatch Error:<br>${errors.join("<br>")}`);
     }
-  
+
     return true;
   }
 
@@ -1510,44 +1553,52 @@ export function initQuickQuery(container, updateHeaderTitle) {
     // 1. Validate schema
     validateSchema(schemaData);
     console.log("Schema validated");
-    saveSchema(tableName, schemaData); // Save schema to local storage 
-  
+    saveSchema(tableName, schemaData); // Save schema to local storage
+
     // 2. Match schema and data fields
     matchSchemaWithData(schemaData, inputData);
     console.log("Schema and data fields matched");
-  
+
     // 3. Get field names from first row of input data
-    const fieldNames = inputData[0].map(name => name.toLowerCase());
+    const fieldNames = inputData[0].map((name) => name.toLowerCase());
     console.log("Field names extracted");
-    
+
     // 4. Get data rows (excluding header row)
-    const dataRows = inputData.slice(1).filter(row => 
-      row.some(cell => cell !== null && cell !== "")
-    );
+    const dataRows = inputData
+      .slice(1)
+      .filter((row) => row.some((cell) => cell !== null && cell !== ""));
     console.log("Data rows extracted");
 
     const schemaMap = new Map(
-      schemaData.map(row => [row[0].toLowerCase(), row])
+      schemaData.map((row) => [row[0].toLowerCase(), row])
     );
-  
+
     // 5. Process each row of data
     const processedRows = dataRows.map((rowData, rowIndex) => {
       try {
         // Process each field in the row
         return fieldNames.map((fieldName, colIndex) => {
           const schemaRow = schemaMap.get(fieldName.toLowerCase()); // Get schema row by field name
-  
+
           if (!schemaRow) {
-            throw new Error(`Schema definition not found for field "${fieldName}"`);
+            throw new Error(
+              `Schema definition not found for field "${fieldName}"`
+            );
           }
-  
+
           const [, dataType, nullable] = schemaRow;
           const value = rowData[colIndex];
-  
+
           // Process the value based on data type
           return {
             fieldName,
-            formattedValue: processValue(value, dataType, nullable, fieldName, tableName),
+            formattedValue: processValue(
+              value,
+              dataType,
+              nullable,
+              fieldName,
+              tableName
+            ),
           };
         });
       } catch (error) {
@@ -1556,22 +1607,26 @@ export function initQuickQuery(container, updateHeaderTitle) {
     });
 
     console.log("Data processed", processedRows);
-  
+
     // 6. Find primary keys for MERGE statements
     const primaryKeys = findPrimaryKeys(schemaData, tableName);
     console.log("Primary keys found:", primaryKeys);
-  
+
     // 7. Generate SQL based on query type
     let query = `SET DEFINE OFF;\n\n`;
 
     if (queryType === "insert") {
-      processedRows.forEach(processedFields => {
+      processedRows.forEach((processedFields) => {
         query += generateInsertStatement(tableName, processedFields);
         query += "\n\n";
       });
     } else {
-      processedRows.forEach(processedFields => {
-        query += generateMergeStatement(tableName, processedFields, primaryKeys);
+      processedRows.forEach((processedFields) => {
+        query += generateMergeStatement(
+          tableName,
+          processedFields,
+          primaryKeys
+        );
         query += "\n\n";
       });
     }
@@ -1582,70 +1637,84 @@ export function initQuickQuery(container, updateHeaderTitle) {
       primaryKeys,
       processedRows
     );
-    
+
     if (selectQuery) {
       query += selectQuery;
     }
-  
+
     return query;
   }
-  
+
   function generateInsertStatement(tableName, processedFields) {
-    const fields = processedFields.map(f => formatFieldName(f.fieldName));
-    const values = processedFields.map(f => f.formattedValue);
-    
-    return `INSERT INTO ${tableName} (${fields.join(", ")}) \nVALUES (${values.join(", ")});`;
+    const fields = processedFields.map((f) => formatFieldName(f.fieldName));
+    const values = processedFields.map((f) => f.formattedValue);
+
+    return `INSERT INTO ${tableName} (${fields.join(
+      ", "
+    )}) \nVALUES (${values.join(", ")});`;
   }
-  
+
   function generateMergeStatement(tableName, processedFields, primaryKeys) {
     // Format fields for SELECT part
     const selectFields = processedFields
-      .map(f => `\n  ${f.formattedValue} AS ${formatFieldName(f.fieldName)}`)
+      .map((f) => `\n  ${f.formattedValue} AS ${formatFieldName(f.fieldName)}`)
       .join(",");
-  
+
     // Format ON conditions for primary keys
     const pkConditions = primaryKeys
-      .map(pk => `tgt.${formatFieldName(pk)} = src.${formatFieldName(pk)}`)
+      .map((pk) => `tgt.${formatFieldName(pk)} = src.${formatFieldName(pk)}`)
       .join(" AND ");
-  
+
     // Format UPDATE SET clause (excluding PKs and creation fields)
     const updateFields = processedFields
-      .filter(f => !primaryKeys.includes(f.fieldName) && 
-                  !["created_time", "created_by"].includes(f.fieldName))
-      .map(f => `  tgt.${formatFieldName(f.fieldName)} = src.${formatFieldName(f.fieldName)}`)
+      .filter(
+        (f) =>
+          !primaryKeys.includes(f.fieldName) &&
+          !["created_time", "created_by"].includes(f.fieldName)
+      )
+      .map(
+        (f) =>
+          `  tgt.${formatFieldName(f.fieldName)} = src.${formatFieldName(
+            f.fieldName
+          )}`
+      )
       .join(",\n");
-  
+
     // Format INSERT fields and values
-    const insertFields = processedFields.map(f => formatFieldName(f.fieldName)).join(", ");
-    const insertValues = processedFields
-      .map(f => `src.${formatFieldName(f.fieldName)}`)
+    const insertFields = processedFields
+      .map((f) => formatFieldName(f.fieldName))
       .join(", ");
-  
+    const insertValues = processedFields
+      .map((f) => `src.${formatFieldName(f.fieldName)}`)
+      .join(", ");
+
     return `MERGE INTO ${tableName} tgt\nUSING (SELECT${selectFields}\n  FROM DUAL) src\nON (${pkConditions})\nWHEN MATCHED THEN UPDATE SET\n${updateFields}\nWHEN NOT MATCHED THEN INSERT (${insertFields})\nVALUES (${insertValues});`;
   }
 
   function generateSelectStatement(tableName, primaryKeys, processedRows) {
     if (primaryKeys.length === 0) return null;
     if (processedRows.length === 0) return null;
-  
+
     // Collect formatted values for each primary key
-    const pkValueMap = new Map(primaryKeys.map(pk => [pk.toLowerCase(), new Set()]));
-  
+    const pkValueMap = new Map(
+      primaryKeys.map((pk) => [pk.toLowerCase(), new Set()])
+    );
+
     // Go through each processed row to collect PK values
-    processedRows.forEach(row => {
-      row.forEach(field => {
+    processedRows.forEach((row) => {
+      row.forEach((field) => {
         if (pkValueMap.has(field.fieldName)) {
           // Only add non-null values
-          if (field.formattedValue !== 'NULL') {
+          if (field.formattedValue !== "NULL") {
             pkValueMap.get(field.fieldName).add(field.formattedValue);
           }
         }
       });
     });
-  
+
     // Build WHERE conditions
     const whereConditions = [];
-    
+
     pkValueMap.forEach((values, pkName) => {
       if (values.size > 0) {
         whereConditions.push(
@@ -1653,50 +1722,62 @@ export function initQuickQuery(container, updateHeaderTitle) {
         );
       }
     });
-  
+
     // If no valid PK values found, return null
     if (whereConditions.length === 0) return null;
-  
-    return `\nSELECT * FROM ${tableName} WHERE ${whereConditions.join(" AND ")} ORDER BY created_time ASC;`;
+
+    return `\nSELECT * FROM ${tableName} WHERE ${whereConditions.join(
+      " AND "
+    )} ORDER BY created_time ASC;`;
   }
-  
+
   function processValue(value, dataType, nullable, fieldName, tableName) {
     // Constants
     const AUDIT_FIELDS = {
       time: ["created_time", "updated_time"],
-      by: ["created_by", "updated_by"]
+      by: ["created_by", "updated_by"],
     };
-  
+
     // Handle audit fields
     if (AUDIT_FIELDS.time.includes(fieldName)) {
       const hasNoValue = !value;
       const hasNoTimestampCharacters = !/[-/]/.test(value);
-      return hasNoValue || hasNoTimestampCharacters ? "SYSDATE" : formatTimestamp(value);
+      return hasNoValue || hasNoTimestampCharacters
+        ? "SYSDATE"
+        : formatTimestamp(value);
     }
-    
+
     if (AUDIT_FIELDS.by.includes(fieldName)) {
       return value?.trim() ? `'${value.replace(/'/g, "''")}'` : "'SYSTEM'";
     }
-  
+
     // Handle NULL values
-    const isNullValue = value === null || value === undefined || value === "" || 
-                       value?.toLowerCase() === "null";
+    const isNullValue =
+      value === null ||
+      value === undefined ||
+      value === "" ||
+      value?.toLowerCase() === "null";
     if (isNullValue) {
       if (nullable?.toLowerCase() !== "yes") {
-        throw new Error(`NULL value not allowed for non-nullable field "${fieldName}"`);
+        throw new Error(
+          `NULL value not allowed for non-nullable field "${fieldName}"`
+        );
       }
       return "NULL";
     }
-  
+
     // Handle special ID fields
     const upperDataType = dataType.toUpperCase();
-    
-    // Config ID with NUMBER type
-    if ((fieldName === "config_id" || fieldName.endsWith("_id")) && 
-        upperDataType === "NUMBER") {
+
+    // Config ID with NUMBER type, OR field ends with _id BUT NOT rule_id
+    if (
+      (fieldName === "config_id" || fieldName.endsWith("_id")) &&
+      upperDataType === "NUMBER" &&
+      fieldName !== "rule_id"
+    ) {
       return `(SELECT MAX(${fieldName})+1 FROM ${tableName})`;
     }
-    
+
     // Config ID with VARCHAR type
     if (fieldName === "config_id" && upperDataType.startsWith("VARCHAR")) {
       if (value.toLowerCase() === "uuid" || !isValidUUID(value)) {
@@ -1704,60 +1785,73 @@ export function initQuickQuery(container, updateHeaderTitle) {
       }
       return `'${value}'`;
     }
-    
+
     // System config ID
     if (fieldName === "system_config_id") {
       return `(SELECT MAX(CAST(${fieldName} AS INT))+1 FROM ${tableName})`;
     }
-  
+
     // Process regular values based on data type
     const fieldDataType = parseDataType(dataType);
     console.log(`"${fieldName}" \t\t "${value}" \t\t "${dataType}"`);
-    
+
     switch (fieldDataType.type) {
-      case 'NUMBER':
+      case "NUMBER":
         // NUMBER(1,0) / boolean number
-        if (fieldDataType.precision === 1 && fieldDataType.scale === 0) { 
-          if (value !== '0' && value !== '1' && value !== 0 && value !== 1) {
+        if (fieldDataType.precision === 1 && fieldDataType.scale === 0) {
+          if (value !== "0" && value !== "1" && value !== 0 && value !== 1) {
             throw new Error(
               `Invalid boolean value "${value}" for field "${fieldName}". Only 0 or 1 are allowed.`
             );
           }
           return value;
         }
-        
+
         // Convert comma to dot if present
-        const normalizedValue = value.toString().replace(',', '.');
+        const normalizedValue = value.toString().replace(",", ".");
         const num = parseFloat(normalizedValue);
-        
+
         if (isNaN(num)) {
-          throw new Error(`Invalid numeric value "${value}" for field "${fieldName}"`);
+          throw new Error(
+            `Invalid numeric value "${value}" for field "${fieldName}"`
+          );
         }
-        
+
         // Validate precision and scale if specified
         if (fieldDataType.precision) {
-          validateNumberPrecision(num, fieldDataType.precision, fieldDataType.scale, fieldName);
+          validateNumberPrecision(
+            num,
+            fieldDataType.precision,
+            fieldDataType.scale,
+            fieldName
+          );
         }
-        
+
         return normalizedValue;
 
-      case 'VARCHAR':
-      case 'VARCHAR2':
-      case 'CHAR':
+      case "VARCHAR":
+      case "VARCHAR2":
+      case "CHAR":
         const UUID_V4_MAXLENGTH = 36;
 
         if (value.toLowerCase() === "uuid") {
-          if (fieldDataType.maxLength && fieldDataType.maxLength < UUID_V4_MAXLENGTH) {
-            throw new Error(`Field "${fieldName}" length (${fieldDataType.maxLength}) is too small to store UUID. Minimum required length is ${UUID_V4_MAXLENGTH}.`);
+          if (
+            fieldDataType.maxLength &&
+            fieldDataType.maxLength < UUID_V4_MAXLENGTH
+          ) {
+            throw new Error(
+              `Field "${fieldName}" length (${fieldDataType.maxLength}) is too small to store UUID. Minimum required length is ${UUID_V4_MAXLENGTH}.`
+            );
           }
           return `'${crypto.randomUUID()}'`;
         }
 
         if (fieldDataType.maxLength) {
-          const length = fieldDataType.unit === 'BYTE' ? 
-            new TextEncoder().encode(value).length : 
-            value.length;
-            
+          const length =
+            fieldDataType.unit === "BYTE"
+              ? new TextEncoder().encode(value).length
+              : value.length;
+
           if (length > fieldDataType.maxLength) {
             throw new Error(
               `Value exceeds maximum length of ${fieldDataType.maxLength} ${fieldDataType.unit} for field "${fieldName}"`
@@ -1765,78 +1859,82 @@ export function initQuickQuery(container, updateHeaderTitle) {
           }
         }
         return `'${value.replace(/'/g, "''")}'`;
-        
-      case 'DATE':
-      case 'TIMESTAMP':
+
+      case "DATE":
+      case "TIMESTAMP":
         if (!isValidDate(value)) {
-          throw new Error(`Invalid date value "${value}" for field "${fieldName}"`);
+          throw new Error(
+            `Invalid date value "${value}" for field "${fieldName}"`
+          );
         }
         return formatTimestamp(value);
-        
-      case 'CLOB':
+
+      case "CLOB":
         return formatCLOB(value);
-        
-      case 'BLOB':
+
+      case "BLOB":
         return formatBLOB(value);
-        
+
       default:
         return `'${value.replace(/'/g, "''")}'`;
     }
   }
-  
+
   function parseDataType(dataType) {
     const upperType = dataType.toUpperCase();
-    
+
     // Parse NUMBER type
     const numberMatch = upperType.match(/NUMBER\((\d+)(?:,\s*(\d+))?\)/);
     if (numberMatch) {
       return {
-        type: 'NUMBER',
+        type: "NUMBER",
         precision: parseInt(numberMatch[1]),
-        scale: numberMatch[2] ? parseInt(numberMatch[2]) : 0
+        scale: numberMatch[2] ? parseInt(numberMatch[2]) : 0,
       };
     }
-    
+
     // Parse VARCHAR/CHAR type
-    const stringMatch = upperType.match(/(VARCHAR2?|CHAR)\((\d+)(?:\s+(BYTE|CHAR))?\)/);
+    const stringMatch = upperType.match(
+      /(VARCHAR2?|CHAR)\((\d+)(?:\s+(BYTE|CHAR))?\)/
+    );
     if (stringMatch) {
       return {
         type: stringMatch[1],
         maxLength: parseInt(stringMatch[2]),
-        unit: stringMatch[3] || 'BYTE'
+        unit: stringMatch[3] || "BYTE",
       };
     }
-    
+
     // Basic types
-    if (upperType.startsWith('TIMESTAMP')) return { type: 'TIMESTAMP' };
-    if (upperType === 'DATE') return { type: 'DATE' };
-    if (upperType === 'CLOB') return { type: 'CLOB' };
-    if (upperType === 'BLOB') return { type: 'BLOB' };
-    if (upperType === 'NUMBER') return { type: 'NUMBER' };
-    
+    if (upperType.startsWith("TIMESTAMP")) return { type: "TIMESTAMP" };
+    if (upperType === "DATE") return { type: "DATE" };
+    if (upperType === "CLOB") return { type: "CLOB" };
+    if (upperType === "BLOB") return { type: "BLOB" };
+    if (upperType === "NUMBER") return { type: "NUMBER" };
+
     return { type: upperType };
   }
-  
+
   function validateNumberPrecision(num, precision, scale, fieldName) {
     const numStr = Math.abs(num).toString();
-    const parts = numStr.split('.');
-    
+    const parts = numStr.split(".");
+
     const integerDigits = parts[0].length;
     const decimalDigits = parts[1]?.length || 0;
-    
+
     if (integerDigits + decimalDigits > precision) {
       throw new Error(
         `Value ${num} exceeds maximum precision of ${precision} for field "${fieldName}"`
       );
     }
-    
+
     if (scale !== undefined && decimalDigits > scale) {
       throw new Error(
         `Value ${num} exceeds maximum scale of ${scale} (${precision},${scale}) for field "${fieldName}"`
       );
     }
-    
-    if (scale !== undefined && integerDigits > (precision - scale)) {
+
+    if (scale !== undefined && integerDigits > precision - scale) {
       throw new Error(
         `Integer part of ${num} exceeds maximum allowed digits for field "${fieldName}"`
       );
@@ -1868,7 +1966,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     if (pkFields.length > 0) return pkFields;
 
     // If no primary keys found, use the first field as default
-    return [data[0][0]];
+    return [data[0][0].toLowerCase()];
   }
 
   function isValidUUID(str) {
@@ -2245,92 +2343,92 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   const showErrorState = (errorMessage) => {
     container.innerHTML = ERROR_HTML_PAGE;
-    const errorDiv = container.querySelector('.error-message');
-    const retryButton = container.querySelector('.retry-button');
-    
+    const errorDiv = container.querySelector(".error-message");
+    const retryButton = container.querySelector(".retry-button");
+
     errorDiv.innerHTML = `<b>Failed to load Quick Query Resources:</b><br>${errorMessage}.<br>We use CDN links to load the required tools. Please check your network connection and try again.`;
-    
+
     // Add retry functionality
-    retryButton.addEventListener('click', async () => {
+    retryButton.addEventListener("click", async () => {
       retryButton.disabled = true;
-      retryButton.textContent = 'Retrying...';
+      retryButton.textContent = "Retrying...";
       try {
         await initQuickQuery(container, updateHeaderTitle);
       } catch (error) {
         retryButton.disabled = false;
-        retryButton.textContent = 'Retry Loading';
+        retryButton.textContent = "Retry Loading";
       }
     });
   };
 
   const EVENT_HANDLERS = {
     // Button click handlers
-    'generateQuery': {
-      event: 'click',
-      handler: handleGenerateQuery
+    generateQuery: {
+      event: "click",
+      handler: handleGenerateQuery,
     },
-    'copySQL': {
-      event: 'click',
-      handler: (event) => copyToClipboard(editor.getValue(), event.target)
+    copySQL: {
+      event: "click",
+      handler: (event) => copyToClipboard(editor.getValue(), event.target),
     },
-    'clearAll': {
-      event: 'click',
-      handler: handleClearAll
+    clearAll: {
+      event: "click",
+      handler: handleClearAll,
     },
-    'downloadSQL': {
-      event: 'click',
-      handler: handleDownloadSql
+    downloadSQL: {
+      event: "click",
+      handler: handleDownloadSql,
     },
-    'toggleGuide': {
-      event: 'click',
-      handler: handleToggleGuide
+    toggleGuide: {
+      event: "click",
+      handler: handleToggleGuide,
     },
-    'toggleWordWrap': {
-      event: 'click',
-      handler: handleToggleWordWrap
+    toggleWordWrap: {
+      event: "click",
+      handler: handleToggleWordWrap,
     },
-    
+
     // Simulation handlers
-    'simulationFillSchemaButton': {
-      event: 'click',
-      handler: handleSimulationFillSchema
+    simulationFillSchemaButton: {
+      event: "click",
+      handler: handleSimulationFillSchema,
     },
-    'simulationFillDataButton': {
-      event: 'click',
-      handler: handleSimulationFillData
+    simulationFillDataButton: {
+      event: "click",
+      handler: handleSimulationFillData,
     },
-    'simulationGenerateQueryButton': {
-      event: 'click',
-      handler: handleSimulationGenerateQuery
+    simulationGenerateQueryButton: {
+      event: "click",
+      handler: handleSimulationGenerateQuery,
     },
-    
+
     // Data manipulation handlers
-    'addFieldNames': {
-      event: 'click',
-      handler: handleAddFieldNames
+    addFieldNames: {
+      event: "click",
+      handler: handleAddFieldNames,
     },
-    'addDataRow': {
-      event: 'click',
-      handler: handleAddDataRow
+    addDataRow: {
+      event: "click",
+      handler: handleAddDataRow,
     },
-    'removeDataRow': {
-      event: 'click',
-      handler: handleRemoveDataRow
+    removeDataRow: {
+      event: "click",
+      handler: handleRemoveDataRow,
     },
-    'addNewSchemaRow': {
-      event: 'click',
-      handler: handleAddNewSchemaRow
+    addNewSchemaRow: {
+      event: "click",
+      handler: handleAddNewSchemaRow,
     },
-    'removeLastSchemaRow': {
-      event: 'click',
-      handler: handleRemoveLastSchemaRow
+    removeLastSchemaRow: {
+      event: "click",
+      handler: handleRemoveLastSchemaRow,
     },
-    
+
     // Select handlers
-    'queryTypeSelect': {
-      event: 'change',
-      handler: handleGenerateQuery
-    }
+    queryTypeSelect: {
+      event: "change",
+      handler: handleGenerateQuery,
+    },
   };
 
   function setupEventListeners() {
@@ -2340,7 +2438,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         console.warn(`Element with id '${id}' not found`);
         return;
       }
-  
+
       // Handle cases where an element has multiple event handlers
       if (Array.isArray(config)) {
         config.forEach(({ event, handler }) => {
@@ -2354,7 +2452,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     });
   }
 
-  // Initiate page tools 
+  // Initiate page tools
   let editor;
   let schemaTable;
   let dataTable;
@@ -2364,34 +2462,43 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const script = document.createElement("script");
       script.src = src;
       script.onload = () => resolve(true);
-      script.onerror = (error) => reject(new Error(`Failed to load script: ${src}`));
+      script.onerror = (error) =>
+        reject(new Error(`Failed to load script: ${src}`));
       document.head.appendChild(script);
     });
   }
-  
+
   function loadStyle(href) {
     return new Promise((resolve, reject) => {
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = href;
       link.onload = () => resolve(true);
-      link.onerror = (error) => reject(new Error(`Failed to load stylesheet: ${href}`));
+      link.onerror = (error) =>
+        reject(new Error(`Failed to load stylesheet: ${href}`));
       document.head.appendChild(link);
     });
   }
 
   async function loadHandsontable() {
-    return retryOperation(async () => {
-      const [scriptLoaded, styleLoaded] = await Promise.all([
-        loadScript("https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"),
-        loadStyle("https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css")
-      ]);
-      return { scriptLoaded, styleLoaded };
-    }, { 
-      name: 'Handsontable loading',
-      retries: 3,
-      delay: 1000
-    });
+    return retryOperation(
+      async () => {
+        const [scriptLoaded, styleLoaded] = await Promise.all([
+          loadScript(
+            "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"
+          ),
+          loadStyle(
+            "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css"
+          ),
+        ]);
+        return { scriptLoaded, styleLoaded };
+      },
+      {
+        name: "Handsontable loading",
+        retries: 3,
+        delay: 1000,
+      }
+    );
   }
 
   // Start the initialization process
@@ -2403,51 +2510,56 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
       // Single initialization flow with retry logic
       retryOperation(
-        () => new Promise((resolveOp, rejectOp) => {
-          loadHandsontable()
-            .then(() => {
-              initializeSchemaTable();
-              initializeEditor();
-              setupEventListeners();
-              setupTableNameSearch(parent);
+        () =>
+          new Promise((resolveOp, rejectOp) => {
+            loadHandsontable()
+              .then(() => {
+                initializeSchemaTable();
+                initializeEditor();
+                setupEventListeners();
+                setupTableNameSearch(parent);
 
-
-              // Try to load most recent schema from local storage
-              const allTables = getAllTables();
-              if (allTables.length > 0) {
-                const mostRecent = allTables[0];
-                const schema = loadSchema(mostRecent.fullName);
-                if (schema) {
-                  document.getElementById('tableNameInput').value = mostRecent.fullName;
-                  schemaTable.loadData(schema);
-                  updateDataSpreadsheet();
+                // Try to load most recent schema from local storage
+                const allTables = getAllTables();
+                if (allTables.length > 0) {
+                  const mostRecent = allTables[0];
+                  const schema = loadSchema(mostRecent.fullName);
+                  if (schema) {
+                    document.getElementById("tableNameInput").value =
+                      mostRecent.fullName;
+                    schemaTable.loadData(schema);
+                    updateDataSpreadsheet();
+                  }
                 }
-              }
-              createSchemaOverlay();
-              
-              resolveOp();
-            })
-            .catch(rejectOp);
-        }),
+                createSchemaOverlay();
+
+                resolveOp();
+              })
+              .catch(rejectOp);
+          }),
         {
-          name: 'Quick Query initialization',
+          name: "Quick Query initialization",
           retries: 3,
           delay: 1000,
           onFailedAttempt: (error, attempt, maxRetries) => {
-            console.warn(`Initialization attempt ${attempt}/${maxRetries} failed:`, error);
-            showError(`Loading tools required... (Attempt ${attempt}/${maxRetries})`);
-          }
+            console.warn(
+              `Initialization attempt ${attempt}/${maxRetries} failed:`,
+              error
+            );
+            showError(
+              `Loading tools required... (Attempt ${attempt}/${maxRetries})`
+            );
+          },
         }
       )
-      .then(resolve)
-      .catch(error => {
-        console.error('Failed to initialize Quick Query:', error);
-        showErrorState(error.message || 'Unknown error occurred');
-        reject(error);
-      });
-
+        .then(resolve)
+        .catch((error) => {
+          console.error("Failed to initialize Quick Query:", error);
+          showErrorState(error.message || "Unknown error occurred");
+          reject(error);
+        });
     } catch (error) {
-      showErrorState(error.message || 'Unknown error occurred');
+      showErrorState(error.message || "Unknown error occurred");
       reject(error);
     }
   });
