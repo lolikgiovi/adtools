@@ -1793,7 +1793,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Process regular values based on data type
     const fieldDataType = parseDataType(dataType);
-    console.log(`"${fieldName}" \t\t "${value}" \t\t "${dataType}"`);
 
     switch (fieldDataType.type) {
       case "NUMBER":
@@ -1976,56 +1975,122 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function formatTimestamp(value) {
-    // Handle SYSDATE
-    if (value.toUpperCase() === "SYSDATE") {
-      return "SYSDATE";
+    // Handle special cases
+    if (!value) return "NULL";
+    const upperValue = value.toUpperCase();
+    if (upperValue === "SYSDATE" || upperValue === "CURRENT_TIMESTAMP") {
+      return upperValue;
     }
 
-    // Find matching format configuration
-    for (const formatConfig of Object.values(DATE_FORMATS)) {
-      if (formatConfig.regex.test(value)) {
-        // Try parsing with each format in the configuration
-        for (const format of formatConfig.formats) {
-          const parsedDate = moment(value, format, true);
-          if (parsedDate.isValid()) {
-            let formattedDate;
-            let oracleFormat;
+    try {
+      // 1. Handle ISO 8601 format with timezone
+      if (
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(
+          value
+        )
+      ) {
+        const parsed = moment(value);
+        if (parsed.isValid()) {
+          const fractionalMatch = value.match(/\.(\d+)/);
+          const precision = fractionalMatch
+            ? Math.min(fractionalMatch[1].length, 9)
+            : 0;
 
-            // Handle timestamp with fractional seconds
-            if (value.includes(".") || value.includes(",")) {
-              const fractionalPart = value.split(/[.,]/)[1];
-              const precision = Math.min(fractionalPart.length, 9);
-              formattedDate =
-                parsedDate.format("YYYY-MM-DD HH:mm:ss") +
-                "." +
-                fractionalPart.substring(0, precision);
-              oracleFormat = `YYYY-MM-DD HH24:MI:SS.FF${precision}`;
-            } else {
-              // All other cases (including date-only) get standard timestamp format
-              formattedDate = parsedDate.format("YYYY-MM-DD HH:mm:ss");
-              oracleFormat = "YYYY-MM-DD HH24:MI:SS";
-            }
+          if (precision > 0) {
+            return `TO_TIMESTAMP_TZ('${parsed.format(
+              "YYYY-MM-DD HH:mm:ss"
+            )}${value.substring(
+              value.indexOf("."),
+              value.indexOf(".") + precision + 1
+            )}${parsed.format(
+              "Z"
+            )}', 'YYYY-MM-DD HH24:MI:SS.FF${precision}TZH:TZM')`;
+          }
+          return `TO_TIMESTAMP_TZ('${parsed.format(
+            "YYYY-MM-DD HH:mm:ssZ"
+          )}', 'YYYY-MM-DD HH24:MI:SSTZH:TZM')`;
+        }
+      }
 
-            return `TO_TIMESTAMP('${formattedDate}', '${oracleFormat}')`;
+      // 2. Handle timestamps with fractional seconds
+      if (value.includes(".") || value.includes(",")) {
+        const [datePart, fractionalPart] = value.split(/[.,]/);
+        const precision = Math.min(fractionalPart?.length || 0, 9);
+
+        const parsed = moment(datePart);
+        if (parsed.isValid()) {
+          return `TO_TIMESTAMP('${parsed.format(
+            "YYYY-MM-DD HH:mm:ss"
+          )}.${fractionalPart.substring(
+            0,
+            precision
+          )}', 'YYYY-MM-DD HH24:MI:SS.FF${precision}')`;
+        }
+      }
+
+      // 3. Handle common formats with strict parsing
+      const commonFormats = [
+        "YYYY-MM-DD HH:mm:ss",
+        "DD-MM-YYYY HH:mm:ss",
+        "MM/DD/YYYY HH:mm:ss",
+        "DD/MM/YYYY HH:mm:ss",
+        "YYYY-MM-DD",
+        "DD-MM-YYYY",
+        "MM/DD/YYYY",
+        "DD/MM/YYYY",
+        "DD-MMM-YYYY",
+        "DD-MMM-YY",
+        "DD.MM.YYYY HH:mm:ss",
+        "DD.MM.YYYY",
+        "YYYY/MM/DD HH:mm:ss",
+        "YYYY/MM/DD",
+      ];
+
+      for (const format of commonFormats) {
+        const parsed = moment(value, format, true);
+        if (parsed.isValid()) {
+          return `TO_TIMESTAMP('${parsed.format(
+            "YYYY-MM-DD HH:mm:ss"
+          )}', 'YYYY-MM-DD HH24:MI:SS')`;
+        }
+      }
+
+      // 4. Handle AM/PM format
+      if (/[AaPpMm]/.test(value)) {
+        const amPmFormats = [
+          "MM/DD/YYYY hh:mm:ss A",
+          "DD-MM-YYYY hh:mm:ss A",
+          "YYYY-MM-DD hh:mm:ss A",
+          "DD/MM/YYYY hh:mm:ss A",
+          "MM-DD-YYYY hh:mm:ss A",
+        ];
+
+        for (const format of amPmFormats) {
+          const parsed = moment(value, format, true);
+          if (parsed.isValid()) {
+            return `TO_TIMESTAMP('${parsed.format(
+              "YYYY-MM-DD HH:mm:ss"
+            )}', 'YYYY-MM-DD HH24:MI:SS')`;
           }
         }
       }
-    }
 
-    if (isValidDate(value)) {
-      const parsedDate = moment(value);
-      if (parsedDate.isValid()) {
-        return `TO_TIMESTAMP('${parsedDate.format(
+      // 5. Last resort: try flexible parsing
+      const parsed = moment(value);
+      if (parsed.isValid()) {
+        console.warn(`Using flexible date parsing for format: ${value}`);
+        return `TO_TIMESTAMP('${parsed.format(
           "YYYY-MM-DD HH:mm:ss"
         )}', 'YYYY-MM-DD HH24:MI:SS')`;
       }
-    }
 
-    console.warn(`Invalid date format: ${value}. Using as-is.`);
-    return `TO_TIMESTAMP('${value.replace(
-      /'/g,
-      "''"
-    )}', 'YYYY-MM-DD HH24:MI:SS')`;
+      throw new Error(`Unable to parse date format: ${value}`);
+    } catch (error) {
+      console.error(`Error parsing timestamp: ${value}`, error);
+      throw new Error(
+        `Invalid timestamp format: ${value}. Please use a valid date/time format.`
+      );
+    }
   }
 
   function formatCLOB(value) {
@@ -2066,19 +2131,49 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function isValidDate(value) {
-    // Handle SYSDATE
-    if (value.toUpperCase() === "SYSDATE") {
+    // Handle special cases
+    if (!value) return false;
+    if (
+      value.toUpperCase() === "SYSDATE" ||
+      value.toUpperCase() === "CURRENT_TIMESTAMP"
+    ) {
       return true;
     }
 
-    // Check against all defined formats
-    return Object.values(DATE_FORMATS).some((formatConfig) => {
-      return (
-        formatConfig.formats.some((format) =>
-          moment(value, format, true).isValid()
-        ) || formatConfig.regex.test(value)
-      );
-    });
+    // Try parsing with common formats first (strict mode)
+    const commonFormats = [
+      "YYYY-MM-DD HH:mm:ss",
+      "YYYY-MM-DD[T]HH:mm:ss.SSSZ", // ISO 8601
+      "DD-MM-YYYY HH:mm:ss",
+      "MM/DD/YYYY HH:mm:ss",
+      "DD/MM/YYYY HH:mm:ss",
+      "YYYY-MM-DD",
+      "DD-MM-YYYY",
+      "MM/DD/YYYY",
+      "DD/MM/YYYY",
+      "DD-MMM-YYYY",
+      "DD-MMM-YY",
+      "DD.MM.YYYY HH:mm:ss",
+      "DD.MM.YYYY",
+      "YYYY/MM/DD HH:mm:ss",
+      "YYYY/MM/DD",
+      "MM/DD/YYYY hh:mm:ss A",
+      "DD-MM-YYYY hh:mm:ss A",
+    ];
+
+    // Try strict parsing with common formats
+    if (commonFormats.some((format) => moment(value, format, true).isValid())) {
+      return true;
+    }
+
+    // If strict parsing fails, try flexible parsing as last resort
+    const parsed = moment(value);
+    if (parsed.isValid()) {
+      console.warn(`Date validated using flexible parsing: ${value}`);
+      return true;
+    }
+
+    return false;
   }
 
   function isOracleReservedWord(word) {
@@ -2231,6 +2326,11 @@ export function initQuickQuery(container, updateHeaderTitle) {
       regex:
         /^(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2}|\d{2}-[A-Z]{3}-\d{4})\s\d{2}:\d{2}:\d{2}$/i,
       oracleFormat: "DD-MM-YYYY HH24:MI:SS",
+    },
+    ISO_TIMESTAMP: {
+      formats: ["YYYY-MM-DD HH:mm:ss.SSS"],
+      regex: /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}$/,
+      oracleFormat: "YYYY-MM-DD HH24:MI:SS.FF3",
     },
     TIMESTAMP: {
       formats: ["DD-MM-YYYY HH.mm.ss,SSSSSSSSS"],
