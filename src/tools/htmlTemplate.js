@@ -3,7 +3,7 @@ import {
   initCodeMirror,
   createCodeMirrorInstance,
 } from "../utils/codeMirror.js";
-import { getDomains } from "../config/domains.js";
+// import { getDomains } from "../config/domains.js";
 import { parseVelocityTemplate } from "../utils/vtlParser.js";
 
 export async function initHtmlTemplate(container, updateHeaderTitle) {
@@ -83,14 +83,14 @@ export async function initHtmlTemplate(container, updateHeaderTitle) {
   toggleWrapButton.textContent = "Disable Word Wrap";
   toggleHighlightButton.textContent = "Disable Syntax Highlight";
 
-  // Populate baseUrl select
-  const domains = getDomains();
-  for (const [key, value] of Object.entries(domains)) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = key;
-    baseUrlSelect.appendChild(option);
-  }
+  // // Populate baseUrl select
+  // const domains = getDomains();
+  // for (const [key, value] of Object.entries(domains)) {
+  //   const option = document.createElement("option");
+  //   option.value = value;
+  //   option.textContent = key;
+  //   baseUrlSelect.appendChild(option);
+  // }
 
   // Core functionalities
   function toggleWordWrap() {

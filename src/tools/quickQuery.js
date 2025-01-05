@@ -206,86 +206,108 @@ function searchSavedSchemas(searchTerm) {
   // Split into schema and table parts
   let [schemaSearch, tableSearch] = searchTerm.split(".");
 
-  // DBeaver-style search behavior:
-  // 1. Before dot: search term can match either schema OR table name
-  // 2. After dot: only search tables within matched schemas
+  // Enhanced abbreviation function that generates multiple possible abbreviations
+  function getSchemaAbbreviations(schemaName) {
+    const parts = schemaName.split("_");
+    const abbrs = new Set();
 
+    // Full abbreviation (e.g., "wsb" for "wealth_secondary_bond")
+    abbrs.add(parts.map((part) => part[0]?.toLowerCase()).join(""));
+
+    // Partial abbreviations taking first two components (e.g., "ws" for "wealth_secondary_bond")
+    if (parts.length > 2) {
+      abbrs.add(
+        parts
+          .slice(0, 2)
+          .map((part) => part[0]?.toLowerCase())
+          .join("")
+      );
+    }
+
+    // Sequential pairs of components (e.g., "ws", "sb" for "wealth_secondary_bond")
+    for (let i = 0; i < parts.length - 1; i++) {
+      abbrs.add(
+        parts
+          .slice(i, i + 2)
+          .map((part) => part[0]?.toLowerCase())
+          .join("")
+      );
+    }
+
+    return abbrs;
+  }
+
+  function getScore(schema, table, searchTerm) {
+    const termLower = searchTerm.toLowerCase();
+    schema = schema.toLowerCase();
+    table = table?.toLowerCase();
+
+    // Get all possible abbreviations
+    const schemaAbbrs = getSchemaAbbreviations(schema);
+
+    if (schema === termLower) return 7; // Exact schema match
+    if (table === termLower) return 6; // Exact table match
+    if (schemaAbbrs.has(termLower)) return 5; // Any abbreviation match
+    if (schema.startsWith(termLower)) return 4; // Schema starts with term
+    if (table?.startsWith(termLower)) return 3; // Table starts with term
+    if (schema.includes(termLower)) return 2; // Schema contains term
+    if (table?.includes(termLower)) return 1; // Table contains term
+    return 0;
+  }
+
+  // DBeaver-style search behavior
   if (!tableSearch) {
-    // No dot - search both schema and table names
     const searchPattern = `%${schemaSearch}%`;
     const pattern = sqlLikeToRegex(searchPattern);
 
     return allTables
-      .filter(
-        (table) =>
-          pattern.test(table.schemaName) || pattern.test(table.tableName)
-      )
+      .filter((table) => {
+        const schemaAbbrs = getSchemaAbbreviations(table.schemaName);
+        return (
+          pattern.test(table.schemaName) ||
+          pattern.test(table.tableName) ||
+          schemaAbbrs.has(schemaSearch.toLowerCase())
+        );
+      })
       .sort((a, b) => {
-        // Sort by relevance:
-        // 1. Schema exact match
-        // 2. Table exact match
-        // 3. Schema starts with
-        // 4. Table starts with
-        // 5. Contains
-        const termLower = schemaSearch.toLowerCase();
-        const schemaA = a.schemaName.toLowerCase();
-        const schemaB = b.schemaName.toLowerCase();
-        const tableA = a.tableName.toLowerCase();
-        const tableB = b.tableName.toLowerCase();
+        const scoreA = getScore(a.schemaName, a.tableName, schemaSearch);
+        const scoreB = getScore(b.schemaName, b.tableName, schemaSearch);
 
-        function getScore(schema, table) {
-          if (schema === termLower) return 5;
-          if (table === termLower) return 4;
-          if (schema.startsWith(termLower)) return 3;
-          if (table.startsWith(termLower)) return 2;
-          return 1;
-        }
-
-        const scoreA = getScore(schemaA, tableA);
-        const scoreB = getScore(schemaB, tableB);
-
-        return scoreB - scoreA || schemaA.localeCompare(schemaB);
+        return scoreB - scoreA || a.schemaName.localeCompare(b.schemaName);
       });
   } else {
-    // Has dot - first find matching schemas, then filter tables
+    // Table search logic with enhanced abbreviation support
     const schemaPattern = sqlLikeToRegex(`%${schemaSearch}%`);
     const tablePattern = sqlLikeToRegex(`%${tableSearch}%`);
 
-    // Find all schemas that match the pattern
-    const matchingSchemas = new Set(
-      allTables
-        .filter((table) => schemaPattern.test(table.schemaName))
-        .map((table) => table.schemaName)
-    );
-
-    // Filter tables in matching schemas
     return allTables
-      .filter(
-        (table) =>
-          matchingSchemas.has(table.schemaName) &&
+      .filter((table) => {
+        const schemaAbbrs = getSchemaAbbreviations(table.schemaName);
+        return (
+          (schemaPattern.test(table.schemaName) ||
+            schemaAbbrs.has(schemaSearch.toLowerCase())) &&
           tablePattern.test(table.tableName)
-      )
+        );
+      })
       .sort((a, b) => {
-        // Sort by schema match first, then table match
-        const schemaScoreA =
-          schemaSearch.toLowerCase() === a.schemaName.toLowerCase() ? 1 : 0;
-        const schemaScoreB =
-          schemaSearch.toLowerCase() === b.schemaName.toLowerCase() ? 1 : 0;
+        const schemaAbbrsA = getSchemaAbbreviations(a.schemaName);
+        const schemaAbbrsB = getSchemaAbbreviations(b.schemaName);
 
-        if (schemaScoreA !== schemaScoreB) {
-          return schemaScoreB - schemaScoreA;
-        }
+        const schemaMatchA =
+          schemaSearch.toLowerCase() === a.schemaName.toLowerCase() ||
+          schemaAbbrsA.has(schemaSearch.toLowerCase());
+        const schemaMatchB =
+          schemaSearch.toLowerCase() === b.schemaName.toLowerCase() ||
+          schemaAbbrsB.has(schemaSearch.toLowerCase());
 
-        const tableScoreA =
-          tableSearch.toLowerCase() === a.tableName.toLowerCase() ? 1 : 0;
-        const tableScoreB =
-          tableSearch.toLowerCase() === b.tableName.toLowerCase() ? 1 : 0;
+        if (schemaMatchA !== schemaMatchB) return schemaMatchB ? 1 : -1;
 
-        if (tableScoreA !== tableScoreB) {
-          return tableScoreB - tableScoreA;
-        }
+        const tableMatchA =
+          tableSearch.toLowerCase() === a.tableName.toLowerCase();
+        const tableMatchB =
+          tableSearch.toLowerCase() === b.tableName.toLowerCase();
 
-        return a.tableName.localeCompare(b.tableName);
+        return tableMatchA ? -1 : tableMatchB ? 1 : 0;
       });
   }
 }
