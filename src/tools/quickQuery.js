@@ -1678,6 +1678,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function generateMergeStatement(tableName, processedFields, primaryKeys) {
     // Format fields for SELECT part
+    console.log("primaryKeys", primaryKeys);
     const selectFields = processedFields
       .map((f) => `\n  ${f.formattedValue} AS ${formatFieldName(f.fieldName)}`)
       .join(",");
@@ -1976,7 +1977,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
       const parameterKeyField = data.find(
         (field) => field[0].toLowerCase() === "parameter_key"
       );
-      if (parameterKeyField) return [parameterKeyField[0]];
+      if (parameterKeyField) return [parameterKeyField[0].toLowerCase()];
     }
 
     // Look for fields with "PK" or "pk" in the Nullable field
@@ -2315,12 +2316,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       "body",
     ]);
     return reservedWords.has(word.toLowerCase());
-  }
-
-  function formatFieldName(fieldName) {
-    return isOracleReservedWord(fieldName)
-      ? `"${fieldName.toLowerCase()}"`
-      : fieldName;
   }
 
   // Constants
