@@ -1685,7 +1685,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Format ON conditions for primary keys
     const pkConditions = primaryKeys
-      .map((pk) => `tgt.${formatFieldName(pk)} = src.${formatFieldName(pk)}`)
+      .map(
+        (pk) =>
+          `tgt.${formatFieldName(pk).toLowerCase()} = src.${formatFieldName(
+            pk
+          ).toLowerCase()}`
+      )
       .join(" AND ");
 
     // Format UPDATE SET clause (excluding PKs and creation fields)
