@@ -1679,12 +1679,13 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function generateMergeStatement(tableName, processedFields, primaryKeys) {
     // Format fields for SELECT part
     console.log("primaryKeys", primaryKeys);
+    const primaryKeysLowerCase = primaryKeys.map((pk) => pk.toLowerCase());
     const selectFields = processedFields
       .map((f) => `\n  ${f.formattedValue} AS ${formatFieldName(f.fieldName)}`)
       .join(",");
 
     // Format ON conditions for primary keys
-    const pkConditions = primaryKeys
+    const pkConditions = primaryKeysLowerCase
       .map(
         (pk) =>
           `tgt.${formatFieldName(pk).toLowerCase()} = src.${formatFieldName(
@@ -1697,7 +1698,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     const updateFields = processedFields
       .filter(
         (f) =>
-          !primaryKeys.includes(f.fieldName) &&
+          !primaryKeysLowerCase.includes(f.fieldName) &&
           !["created_time", "created_by"].includes(f.fieldName)
       )
       .map(
