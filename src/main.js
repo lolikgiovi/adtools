@@ -1,23 +1,25 @@
 import App from "./App.js";
+import { DependencyLoader } from "./utils/dependencyLoader.js";
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await DependencyLoader.loadAll();
   console.log("DOM fully loaded");
+  
   const app = new App();
   app.init();
 
-  checkReload(); // Check for reload
-  disableSwipeBackGesture(); // Disable swipe back gesture
+  // Initialize all functionality
+  checkReload();
+  disableSwipeBackGesture();
+  setupBurgerMenu();
+  setupTouchHandling();
+});
 
-  // Handle navigation
-  window.addEventListener("popstate", () => {
-    const hash = window.location.hash.slice(1);
-    app.loadTool(hash || Object.keys(app.tools)[0]);
-  });
-
-  // Add burger menu functionality
+function setupBurgerMenu() {
   const burgerMenu = document.getElementById("burger-menu");
   const mainNav = document.getElementById("main-nav");
 
+  // Toggle menu on burger click
   burgerMenu.addEventListener("click", () => {
     mainNav.classList.toggle("show");
   });
@@ -35,8 +37,9 @@ document.addEventListener("DOMContentLoaded", () => {
       mainNav.classList.remove("show");
     }
   });
+}
 
-  // Add touch event handler for content scrolling
+function setupTouchHandling() {
   const contentElement = document.getElementById("content");
   contentElement.addEventListener(
     "touchmove",
@@ -46,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     { passive: true }
   );
-});
+}
 
 function disableSwipeBackGesture() {
   let startX;

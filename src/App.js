@@ -1,13 +1,13 @@
 // Import tool initializers
 import { initCodeMirror } from "./utils/codeMirror.js";
-import { initUuidGenerator } from "./tools/uuid.js";
-import { initQueryInGenerator } from "./tools/queryin.js";
-import { initImageConverter } from "./tools/image.js";
-import { initSplunkTemplate } from "./tools/splunk.js";
-import { initHtmlTemplate } from "./tools/htmlTemplate.js";
-import { initScreenshotTemplate } from "./tools/screenshotTemplate.js";
-import { initQuerify } from "./tools/querify.js";
-import { initQuickQuery } from "./tools/quickQuery.js";
+import { initUuidGenerator } from "./features/uuid/uuid.js";
+import { initQueryInGenerator } from "./features/queryin/queryin.js";
+import { initImageConverter } from "./features/image/image.js";
+import { initSplunkTemplate } from "./features/splunk/splunk.js";
+import { initHtmlTemplate } from "./features/html/html.js";
+import { initScreenshotTemplate } from "./features/screenshot/screenshot.js";
+import { initQuerify } from "./features/querify.js";
+import { initQuickQuery } from "./features/quickQuery.js";
 import { trackFeatureUsage } from "./utils/analytics.js";
 
 class App {
