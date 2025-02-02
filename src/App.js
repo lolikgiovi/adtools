@@ -6,8 +6,8 @@ import { initImageConverter } from "./features/image/image.js";
 import { initSplunkTemplate } from "./features/splunk/splunk.js";
 import { initHtmlTemplate } from "./features/html/html.js";
 import { initScreenshotTemplate } from "./features/screenshot/screenshot.js";
-import { initQuerify } from "./features/querify.js";
-import { initQuickQuery } from "./features/quickQuery.js";
+import { initQuerify } from "./features/querify/querify.js";
+import { initQuickQuery } from "./features/quickquery/quickQuery.js";
 import { trackFeatureUsage } from "./utils/analytics.js";
 
 class App {
@@ -57,16 +57,14 @@ class App {
 
       // Get initial route from current path
       const path = window.location.pathname;
-      const initialTool = path.startsWith("/tools/")
-        ? path.split("/").pop()
-        : Object.keys(this.tools)[7]; // Your default tool
+      const initialTool = path.startsWith("/tools/") ? path.split("/").pop() : Object.keys(this.tools)[6]; // Your default tool
 
       // Check if the tool exists
       if (this.tools[initialTool]) {
         this.loadTool(initialTool);
       } else {
         // Redirect to default tool if invalid URL
-        this.loadTool(Object.keys(this.tools)[7]);
+        this.loadTool(Object.keys(this.tools)[6]);
       }
     } catch (error) {
       console.error("Failed to initialize CodeMirror:", error);
@@ -94,10 +92,7 @@ class App {
       this.tools[toolName].init(contentDiv);
 
       // Use hash for local development, path for production
-      if (
-        location.hostname === "localhost" ||
-        location.hostname === "127.0.0.1"
-      ) {
+      if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
         history.pushState(null, null, `#${toolName}`);
       } else {
         history.pushState(null, null, `/tools/${toolName}`);
