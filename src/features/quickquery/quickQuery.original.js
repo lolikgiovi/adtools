@@ -1,7 +1,6 @@
 import { copyToClipboard } from "../../utils/buttons.js";
 import { quickQueryErrorHtmlPage, quickQueryMainHtmlPage, quickQueryTutorialHtmlPage } from "./quickquery.template.js";
 import { oracleReservedWords } from "./quickquery.constants.js";
-import SchemaStorageService from "./quickquery.schema.js";
 
 function retryOperation(operation, options = {}) {
   const { retries = 3, delay = 1000, backoff = 2, name = "Operation", onFailedAttempt = null } = options;
@@ -39,8 +38,248 @@ function retryOperation(operation, options = {}) {
   });
 }
 
+const STORAGE_KEY = "quickquery_schemas";
+const ORACLE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_$#]*$/;
+const MAX_SCHEMA_LENGTH = 30;
+const MAX_TABLE_LENGTH = 128;
+
+// Storage Helper Functions
+function parseTableIdentifier(fullTableName) {
+  const [schemaName, tableName] = fullTableName.split(".");
+  if (!schemaName || !tableName) {
+    throw new Error('Invalid table name format. Expected "schema_name.table_name"');
+  }
+  return { schemaName, tableName };
+}
+
+function getStorageData() {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) {
+      return {
+        schemas: {},
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+    return JSON.parse(data);
+  } catch (error) {
+    console.error("Error reading storage:", error);
+    return {
+      schemas: {},
+      lastUpdated: new Date().toISOString(),
+    };
+  }
+}
+
+function saveStorageData(data) {
+  try {
+    data.lastUpdated = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch (error) {
+    console.error("Error saving to storage:", error);
+    return false;
+  }
+}
+
+// Schema Management Functions
+function saveSchema(fullTableName, schemaData) {
+  try {
+    const { schemaName, tableName } = parseTableIdentifier(fullTableName);
+    const storageData = getStorageData();
+
+    if (!storageData.schemas[schemaName]) {
+      storageData.schemas[schemaName] = { tables: {} };
+    }
+
+    storageData.schemas[schemaName].tables[tableName] = {
+      schema: schemaData,
+      timestamp: new Date().toISOString(),
+    };
+
+    return saveStorageData(storageData);
+  } catch (error) {
+    console.error("Error saving schema:", error);
+    return false;
+  }
+}
+
+function loadSchema(fullTableName) {
+  try {
+    const { schemaName, tableName } = parseTableIdentifier(fullTableName);
+    const storageData = getStorageData();
+    return storageData.schemas[schemaName]?.tables[tableName]?.schema || null;
+  } catch (error) {
+    console.error("Error loading schema:", error);
+    return null;
+  }
+}
+
+function deleteSchema(fullTableName) {
+  try {
+    const { schemaName, tableName } = parseTableIdentifier(fullTableName);
+    const storageData = getStorageData();
+
+    if (storageData.schemas[schemaName]?.tables[tableName]) {
+      delete storageData.schemas[schemaName].tables[tableName];
+
+      if (Object.keys(storageData.schemas[schemaName].tables).length === 0) {
+        delete storageData.schemas[schemaName];
+      }
+
+      return saveStorageData(storageData);
+    }
+    return false;
+  } catch (error) {
+    console.error("Error deleting schema:", error);
+    return false;
+  }
+}
+
+// Local Storage Query Functions
+function getAllTables() {
+  const storageData = getStorageData();
+  const allTables = [];
+
+  Object.entries(storageData.schemas).forEach(([schemaName, schemaData]) => {
+    Object.entries(schemaData.tables).forEach(([tableName, tableData]) => {
+      allTables.push({
+        fullName: `${schemaName}.${tableName}`,
+        schemaName,
+        tableName,
+        timestamp: tableData.timestamp,
+      });
+    });
+  });
+
+  return allTables.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+}
+
+// Schema searching functions
+function getByteLength(str) {
+  return new TextEncoder().encode(str).length;
+}
+
+function validateOracleName(name, type = "schema") {
+  if (!name) return false;
+
+  // Check if name starts with a letter and contains only valid characters
+  if (!ORACLE_NAME_REGEX.test(name)) return false;
+
+  // Check length based on type
+  const byteLength = getByteLength(name);
+  if (type === "schema" && byteLength > MAX_SCHEMA_LENGTH) return false;
+  if (type === "table" && byteLength > MAX_TABLE_LENGTH) return false;
+
+  return true;
+}
+
+function sqlLikeToRegex(pattern) {
+  return new RegExp("^" + pattern.replace(/%/g, ".*").replace(/_/g, ".").replace(/\[/g, "\\[").replace(/\]/g, "\\]") + "$", "i");
+}
+
+function searchSavedSchemas(searchTerm) {
+  const allTables = getAllTables();
+  if (!searchTerm) return allTables;
+
+  // Split into schema and table parts
+  let [schemaSearch, tableSearch] = searchTerm.split(".");
+
+  // Enhanced abbreviation function that generates multiple possible abbreviations
+  function getSchemaAbbreviations(schemaName) {
+    const parts = schemaName.split("_");
+    const abbrs = new Set();
+
+    // Full abbreviation (e.g., "wsb" for "wealth_secondary_bond")
+    abbrs.add(parts.map((part) => part[0]?.toLowerCase()).join(""));
+
+    // Partial abbreviations taking first two components (e.g., "ws" for "wealth_secondary_bond")
+    if (parts.length > 2) {
+      abbrs.add(
+        parts
+          .slice(0, 2)
+          .map((part) => part[0]?.toLowerCase())
+          .join("")
+      );
+    }
+
+    // Sequential pairs of components (e.g., "ws", "sb" for "wealth_secondary_bond")
+    for (let i = 0; i < parts.length - 1; i++) {
+      abbrs.add(
+        parts
+          .slice(i, i + 2)
+          .map((part) => part[0]?.toLowerCase())
+          .join("")
+      );
+    }
+
+    return abbrs;
+  }
+
+  function getScore(schema, table, searchTerm) {
+    const termLower = searchTerm.toLowerCase();
+    schema = schema.toLowerCase();
+    table = table?.toLowerCase();
+
+    // Get all possible abbreviations
+    const schemaAbbrs = getSchemaAbbreviations(schema);
+
+    if (schema === termLower) return 7; // Exact schema match
+    if (table === termLower) return 6; // Exact table match
+    if (schemaAbbrs.has(termLower)) return 5; // Any abbreviation match
+    if (schema.startsWith(termLower)) return 4; // Schema starts with term
+    if (table?.startsWith(termLower)) return 3; // Table starts with term
+    if (schema.includes(termLower)) return 2; // Schema contains term
+    if (table?.includes(termLower)) return 1; // Table contains term
+    return 0;
+  }
+
+  // DBeaver-style search behavior
+  if (!tableSearch) {
+    const searchPattern = `%${schemaSearch}%`;
+    const pattern = sqlLikeToRegex(searchPattern);
+
+    return allTables
+      .filter((table) => {
+        const schemaAbbrs = getSchemaAbbreviations(table.schemaName);
+        return pattern.test(table.schemaName) || pattern.test(table.tableName) || schemaAbbrs.has(schemaSearch.toLowerCase());
+      })
+      .sort((a, b) => {
+        const scoreA = getScore(a.schemaName, a.tableName, schemaSearch);
+        const scoreB = getScore(b.schemaName, b.tableName, schemaSearch);
+
+        return scoreB - scoreA || a.schemaName.localeCompare(b.schemaName);
+      });
+  } else {
+    // Table search logic with enhanced abbreviation support
+    const schemaPattern = sqlLikeToRegex(`%${schemaSearch}%`);
+    const tablePattern = sqlLikeToRegex(`%${tableSearch}%`);
+
+    return allTables
+      .filter((table) => {
+        const schemaAbbrs = getSchemaAbbreviations(table.schemaName);
+        return (schemaPattern.test(table.schemaName) || schemaAbbrs.has(schemaSearch.toLowerCase())) && tablePattern.test(table.tableName);
+      })
+      .sort((a, b) => {
+        const schemaAbbrsA = getSchemaAbbreviations(a.schemaName);
+        const schemaAbbrsB = getSchemaAbbreviations(b.schemaName);
+
+        const schemaMatchA = schemaSearch.toLowerCase() === a.schemaName.toLowerCase() || schemaAbbrsA.has(schemaSearch.toLowerCase());
+        const schemaMatchB = schemaSearch.toLowerCase() === b.schemaName.toLowerCase() || schemaAbbrsB.has(schemaSearch.toLowerCase());
+
+        if (schemaMatchA !== schemaMatchB) return schemaMatchB ? 1 : -1;
+
+        const tableMatchA = tableSearch.toLowerCase() === a.tableName.toLowerCase();
+        const tableMatchB = tableSearch.toLowerCase() === b.tableName.toLowerCase();
+
+        return tableMatchA ? -1 : tableMatchB ? 1 : 0;
+      });
+  }
+}
+
 function setupTableNameSearch(parent) {
-  const schemaService = new SchemaStorageService();
+  const { schemaTable, dataTable, updateDataSpreadsheet, handleAddFieldNames, clearError } = parent;
+
   const tableNameInput = document.getElementById("tableNameInput");
 
   // Disable browser's default suggestions
@@ -122,7 +361,7 @@ function setupTableNameSearch(parent) {
     dropdownContainer.style.display = "none";
 
     // Load the schema if it exists
-    const schema = schemaService.loadSchema(fullName);
+    const schema = loadSchema(fullName);
     if (schema) {
       parent.schemaTable.loadData(schema);
       parent.dataTable.loadData([[], []]);
@@ -150,7 +389,7 @@ function setupTableNameSearch(parent) {
   function handleKeyDown(event) {
     if (dropdownContainer.style.display === "none" && event.key === "ArrowDown") {
       // If dropdown is hidden and down arrow is pressed, show recent items
-      const results = schemaService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
+      const results = searchSavedSchemas("").slice(0, 7); // Get 7 most recent
       showDropdown(results);
       selectedIndex = -1;
       return;
@@ -193,7 +432,7 @@ function setupTableNameSearch(parent) {
 
     if (!input) {
       // Show recent items if input is empty
-      const results = schemaService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
+      const results = searchSavedSchemas("").slice(0, 7); // Get 7 most recent
       showDropdown(results);
       return;
     }
@@ -203,8 +442,8 @@ function setupTableNameSearch(parent) {
     // Validate each part
     if (parts.length > 1) {
       const [schema, table] = parts;
-      const isValidSchema = schemaService.validateOracleName(schema, "schema");
-      const isValidTable = table ? schemaService.validateOracleName(table, "table") : true;
+      const isValidSchema = validateOracleName(schema, "schema");
+      const isValidTable = table ? validateOracleName(table, "table") : true;
 
       if (!isValidSchema || !isValidTable) {
         tableNameInput.style.borderColor = "red";
@@ -212,7 +451,7 @@ function setupTableNameSearch(parent) {
         return;
       }
     } else {
-      const isValidSchema = schemaService.validateOracleName(parts[0], "schema");
+      const isValidSchema = validateOracleName(parts[0], "schema");
       if (!isValidSchema) {
         tableNameInput.style.borderColor = "red";
         dropdownContainer.style.display = "none";
@@ -220,7 +459,7 @@ function setupTableNameSearch(parent) {
       }
     }
 
-    const results = schemaService.searchSavedSchemas(input);
+    const results = searchSavedSchemas(input);
     showDropdown(results);
   }
 
@@ -238,7 +477,6 @@ function setupTableNameSearch(parent) {
 }
 
 export function initQuickQuery(container, updateHeaderTitle) {
-  const schemaService = new SchemaStorageService();
   const parent = {
     schemaTable: null,
     dataTable: null,
@@ -424,7 +662,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function handleToggleGuide() {
     const guideContent = document.getElementById("guide");
     const toggleButton = document.getElementById("toggleGuide");
-    console.log("Toggle Guide pressed");
 
     if (guideContent.classList.contains("hidden")) {
       guideContent.classList.remove("hidden");
@@ -654,7 +891,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Export button
     exportButton.addEventListener("click", () => {
-      const allTables = schemaService.getAllTables();
+      const allTables = getAllTables();
       if (allTables.length === 0) {
         showError("No schemas to export");
         return;
@@ -664,14 +901,14 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Clear All button
     clearAllButton.addEventListener("click", () => {
-      const allTables = schemaService.getAllTables();
+      const allTables = getAllTables();
       if (allTables.length === 0) {
         showError("No schemas to clear");
         return;
       }
 
       if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
-        handleClearAllSchemas();
+        clearAllSchemas();
       }
     });
 
@@ -681,7 +918,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function updateSavedSchemasList() {
     const schemasList = document.getElementById("savedSchemasList");
-    const allTables = schemaService.getAllTables();
+    const allTables = getAllTables();
 
     if (allTables.length === 0) {
       schemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
@@ -754,7 +991,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function handleLoadSchema(fullName) {
-    const schema = schemaService.loadSchema(fullName);
+    const schema = loadSchema(fullName);
     if (schema) {
       document.getElementById("tableNameInput").value = fullName;
       schemaTable.loadData(schema);
@@ -774,7 +1011,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function handleDeleteSchema(fullName) {
     if (confirm(`Delete schema for ${fullName}?`)) {
-      const deleted = schemaService.deleteSchema(fullName);
+      const deleted = deleteSchema(fullName);
       if (deleted) {
         updateSavedSchemasList();
 
@@ -789,12 +1026,20 @@ export function initQuickQuery(container, updateHeaderTitle) {
     }
   }
 
-  function handleClearAllSchemas() {
-    const schemaCleared = schemaService.clearAllSchemas();
-    if (schemaCleared) {
-      showSuccess("All saved schemas have been cleared");
-    } else {
-      showError("Failed to clear all saved schemas");
+  function clearAllSchemas() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      updateSavedSchemasList();
+      showError("All saved schemas have been cleared");
+
+      // If current schema is loaded, clear it too
+      handleClearAll();
+
+      return true;
+    } catch (error) {
+      console.error("Error clearing schemas:", error);
+      showError("Failed to clear schemas");
+      return false;
     }
   }
 
@@ -826,7 +1071,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         Object.entries(jsonData).forEach(([schemaName, tables]) => {
           Object.entries(tables).forEach(([tableName, schema]) => {
             const fullTableName = `${schemaName}.${tableName}`;
-            if (schemaService.saveSchema(fullTableName, schema)) {
+            if (saveSchema(fullTableName, schema)) {
               importCount++;
             }
           });
@@ -868,12 +1113,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function exportSchemas() {
-    const allTables = schemaService.getAllTables();
+    const allTables = getAllTables();
     const exportData = {};
 
     // Group by schema and table
     allTables.forEach((table) => {
-      const schema = schemaService.loadSchema(table.fullName);
+      const schema = loadSchema(table.fullName);
       if (schema) {
         // Initialize schema if needed
         if (!exportData[table.schemaName]) {
@@ -1047,7 +1292,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     // 1. Validate schema
     validateSchema(schemaData);
     console.log("Schema validated");
-    schemaService.saveSchema(tableName, schemaData); // Save schema to local storage
+    saveSchema(tableName, schemaData); // Save schema to local storage
 
     // 2. Match schema and data fields
     matchSchemaWithData(schemaData, inputData);
@@ -1736,10 +1981,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
                 setupTableNameSearch(parent);
 
                 // Try to load most recent schema from local storage
-                const allTables = schemaService.getAllTables();
+                const allTables = getAllTables();
                 if (allTables.length > 0) {
                   const mostRecent = allTables[0];
-                  const schema = schemaService.loadSchema(mostRecent.fullName);
+                  const schema = loadSchema(mostRecent.fullName);
                   if (schema) {
                     document.getElementById("tableNameInput").value = mostRecent.fullName;
                     schemaTable.loadData(schema);

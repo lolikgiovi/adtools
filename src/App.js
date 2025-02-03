@@ -57,14 +57,14 @@ class App {
 
       // Get initial route from current path
       const path = window.location.pathname;
-      const initialTool = path.startsWith("/tools/") ? path.split("/").pop() : Object.keys(this.tools)[6]; // Your default tool
+      const initialTool = path.startsWith("/tools/") ? path.split("/").pop() : Object.keys(this.tools)[7]; // Your default tool
 
       // Check if the tool exists
       if (this.tools[initialTool]) {
         this.loadTool(initialTool);
       } else {
         // Redirect to default tool if invalid URL
-        this.loadTool(Object.keys(this.tools)[6]);
+        this.loadTool(Object.keys(this.tools)[7]);
       }
     } catch (error) {
       console.error("Failed to initialize CodeMirror:", error);

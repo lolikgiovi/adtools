@@ -19,6 +19,27 @@ export const quickQueryMainHtmlPage = `
           </div>
 
           <div id="spreadsheet-schema"></div>
+
+          <div id="guideContainer">
+            <button id="toggleGuide" class="toggle-guide">Tutorial & Simulation</button>
+            <div id="guide" class="guide-content hidden">
+              <h4>Quick Guide:</h4>
+              <ul>
+                <li>Copy and paste your database schema.</li>
+                <li>Use "PK" in the Nullable field to indicate Primary Keys. If no "PK" is stated, default PK would be field[0].</li>
+                <li>You can have multiple primary keys.</li>
+                <li>Fill in the Data Input with your values.</li>
+                <li>Click buttons below to simulate the query generation.</li>
+              </ul>
+              <div class = "button-group simulate-buttons">
+                <button id="simulationFillSchemaButton" class="simulate-button">1. Fill Schema</button>
+                <p>&rarr;</p>
+                <button id="simulationFillDataButton" class="simulate-button">2. Fill Data</button>
+                <p>&rarr;</p>
+                <button id="simulationGenerateQueryButton" class="simulate-button">3. Generate Query</button>
+              </div>
+            </div>
+          </div>
       </div>
       <div class="quick-query-right-panel">
         <div class="button-group quick-query-right-controls">
@@ -75,7 +96,6 @@ export const quickQueryErrorHtmlPage = `
 `;
 
 export const quickQueryTutorialHtmlPage = `
-<div id="guideContainer">
   <button id="toggleGuide" class="toggle-guide">Tutorial & Simulation</button>
   <div id="guide" class="guide-content hidden">
     <h4>Quick Guide:</h4>
@@ -94,5 +114,4 @@ export const quickQueryTutorialHtmlPage = `
       <button id="simulationGenerateQueryButton" class="simulate-button">3. Generate Query</button>
     </div>
   </div>
-</div>
 `;

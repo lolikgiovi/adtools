@@ -1,0 +1,270 @@
+const STORAGE_KEY = "quickquery_schemas";
+const ORACLE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_$#]*$/;
+const MAX_SCHEMA_LENGTH = 30;
+const MAX_TABLE_LENGTH = 128;
+
+class SchemaStorageService {
+  constructor() {
+    this.STORAGE_KEY = STORAGE_KEY;
+  }
+
+  // Storage Helper Functions
+  parseTableIdentifier(fullTableName) {
+    const [schemaName, tableName] = fullTableName.split(".");
+    if (!schemaName || !tableName) {
+      throw new Error('Invalid table name format. Expected "schema_name.table_name"');
+    }
+    return { schemaName, tableName };
+  }
+
+  getStorageData() {
+    try {
+      const data = localStorage.getItem(this.STORAGE_KEY);
+      if (!data) {
+        return {
+          schemas: {},
+          lastUpdated: new Date().toISOString(),
+        };
+      }
+      return JSON.parse(data);
+    } catch (error) {
+      console.error("Error reading storage:", error);
+      return {
+        schemas: {},
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+  }
+
+  saveStorageData(data) {
+    try {
+      data.lastUpdated = new Date().toISOString();
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+      return true;
+    } catch (error) {
+      console.error("Error saving to storage:", error);
+      return false;
+    }
+  }
+
+  // Schema Management Functions
+  saveSchema(fullTableName, schemaData) {
+    try {
+      const { schemaName, tableName } = this.parseTableIdentifier(fullTableName);
+      const storageData = this.getStorageData();
+
+      if (!storageData.schemas[schemaName]) {
+        storageData.schemas[schemaName] = { tables: {} };
+      }
+
+      storageData.schemas[schemaName].tables[tableName] = {
+        schema: schemaData,
+        timestamp: new Date().toISOString(),
+      };
+
+      return this.saveStorageData(storageData);
+    } catch (error) {
+      console.error("Error saving schema:", error);
+      return false;
+    }
+  }
+
+  loadSchema(fullTableName) {
+    try {
+      const { schemaName, tableName } = this.parseTableIdentifier(fullTableName);
+      const storageData = this.getStorageData();
+      return storageData.schemas[schemaName]?.tables[tableName]?.schema || null;
+    } catch (error) {
+      console.error("Error loading schema:", error);
+      return null;
+    }
+  }
+
+  deleteSchema(fullTableName) {
+    try {
+      const { schemaName, tableName } = this.parseTableIdentifier(fullTableName);
+      const storageData = this.getStorageData();
+
+      if (storageData.schemas[schemaName]?.tables[tableName]) {
+        delete storageData.schemas[schemaName].tables[tableName];
+
+        if (Object.keys(storageData.schemas[schemaName].tables).length === 0) {
+          delete storageData.schemas[schemaName];
+        }
+
+        return this.saveStorageData(storageData);
+      }
+      return false;
+    } catch (error) {
+      console.error("Error deleting schema:", error);
+      return false;
+    }
+  }
+
+  clearAllSchemas() {
+    try {
+      localStorage.removeItem(this.STORAGE_KEY);
+      return true;
+    } catch (error) {
+      console.error("Error clearing schemas:", error);
+      return false;
+    }
+  }
+
+  // Query Functions
+  getAllTables() {
+    const storageData = this.getStorageData();
+    const allTables = [];
+
+    Object.entries(storageData.schemas).forEach(([schemaName, schemaData]) => {
+      Object.entries(schemaData.tables).forEach(([tableName, tableData]) => {
+        allTables.push({
+          fullName: `${schemaName}.${tableName}`,
+          schemaName,
+          tableName,
+          timestamp: tableData.timestamp,
+        });
+      });
+    });
+
+    return allTables.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  // Schema searching functions
+  getByteLength(str) {
+    return new TextEncoder().encode(str).length;
+  }
+
+  validateOracleName(name, type = "schema") {
+    if (!name) return false;
+
+    if (!ORACLE_NAME_REGEX.test(name)) return false;
+
+    const byteLength = this.getByteLength(name);
+    if (type === "schema" && byteLength > MAX_SCHEMA_LENGTH) return false;
+    if (type === "table" && byteLength > MAX_TABLE_LENGTH) return false;
+
+    return true;
+  }
+
+  sqlLikeToRegex(pattern) {
+    return new RegExp("^" + pattern.replace(/%/g, ".*").replace(/_/g, ".").replace(/\[/g, "\\[").replace(/\]/g, "\\]") + "$", "i");
+  }
+
+  getSchemaAbbreviations(schemaName) {
+    const parts = schemaName.split("_");
+    const abbrs = new Set();
+
+    abbrs.add(parts.map((part) => part[0]?.toLowerCase()).join(""));
+
+    if (parts.length > 2) {
+      abbrs.add(
+        parts
+          .slice(0, 2)
+          .map((part) => part[0]?.toLowerCase())
+          .join("")
+      );
+    }
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      abbrs.add(
+        parts
+          .slice(i, i + 2)
+          .map((part) => part[0]?.toLowerCase())
+          .join("")
+      );
+    }
+
+    return abbrs;
+  }
+
+  getScore(schema, table, searchTerm) {
+    const termLower = searchTerm.toLowerCase();
+    schema = schema.toLowerCase();
+    table = table?.toLowerCase();
+
+    const schemaAbbrs = this.getSchemaAbbreviations(schema);
+
+    if (schema === termLower) return 7;
+    if (table === termLower) return 6;
+    if (schemaAbbrs.has(termLower)) return 5;
+    if (schema.startsWith(termLower)) return 4;
+    if (table?.startsWith(termLower)) return 3;
+    if (schema.includes(termLower)) return 2;
+    if (table?.includes(termLower)) return 1;
+    return 0;
+  }
+
+  searchSavedSchemas(searchTerm) {
+    const allTables = this.getAllTables();
+    if (!searchTerm) return allTables;
+
+    let [schemaSearch, tableSearch] = searchTerm.split(".");
+
+    if (!tableSearch) {
+      const searchPattern = `%${schemaSearch}%`;
+      const pattern = this.sqlLikeToRegex(searchPattern);
+
+      return allTables
+        .filter((table) => {
+          const schemaAbbrs = this.getSchemaAbbreviations(table.schemaName);
+          return pattern.test(table.schemaName) || pattern.test(table.tableName) || schemaAbbrs.has(schemaSearch.toLowerCase());
+        })
+        .sort((a, b) => {
+          const scoreA = this.getScore(a.schemaName, a.tableName, schemaSearch);
+          const scoreB = this.getScore(b.schemaName, b.tableName, schemaSearch);
+
+          return scoreB - scoreA || a.schemaName.localeCompare(b.schemaName);
+        });
+    } else {
+      const schemaPattern = this.sqlLikeToRegex(`%${schemaSearch}%`);
+      const tablePattern = this.sqlLikeToRegex(`%${tableSearch}%`);
+
+      return allTables
+        .filter((table) => {
+          const schemaAbbrs = this.getSchemaAbbreviations(table.schemaName);
+          return (
+            (schemaPattern.test(table.schemaName) || schemaAbbrs.has(schemaSearch.toLowerCase())) && tablePattern.test(table.tableName)
+          );
+        })
+        .sort((a, b) => {
+          const schemaAbbrsA = this.getSchemaAbbreviations(a.schemaName);
+          const schemaAbbrsB = this.getSchemaAbbreviations(b.schemaName);
+
+          const schemaMatchA = schemaSearch.toLowerCase() === a.schemaName.toLowerCase() || schemaAbbrsA.has(schemaSearch.toLowerCase());
+          const schemaMatchB = schemaSearch.toLowerCase() === b.schemaName.toLowerCase() || schemaAbbrsB.has(schemaSearch.toLowerCase());
+
+          if (schemaMatchA !== schemaMatchB) return schemaMatchB ? 1 : -1;
+
+          const tableMatchA = tableSearch.toLowerCase() === a.tableName.toLowerCase();
+          const tableMatchB = tableSearch.toLowerCase() === b.tableName.toLowerCase();
+
+          return tableMatchA ? -1 : tableMatchB ? 1 : 0;
+        });
+    }
+  }
+
+  validateSchemaFormat(data) {
+    if (!data || typeof data !== "object") return false;
+
+    return Object.entries(data).every(([schemaName, tables]) => {
+      if (typeof tables !== "object") return false;
+
+      return Object.entries(tables).every(([tableName, schema]) => {
+        return (
+          Array.isArray(schema) &&
+          schema.every(
+            (row) =>
+              Array.isArray(row) &&
+              row.length >= 3 &&
+              typeof row[0] === "string" &&
+              typeof row[1] === "string" &&
+              typeof row[2] === "string"
+          )
+        );
+      });
+    });
+  }
+}
+
+export default SchemaStorageService;
