@@ -2,6 +2,7 @@ import { copyToClipboard } from "../../utils/buttons.js";
 import { quickQueryErrorHtmlPage, quickQueryMainHtmlPage, quickQueryTutorialHtmlPage } from "./quickquery.template.js";
 import { oracleReservedWords } from "./quickquery.constants.js";
 import SchemaStorageService from "./quickquery.schema.js";
+import { SchemaValidationService } from "./quickquery.validation.js";
 
 function retryOperation(operation, options = {}) {
   const { retries = 3, delay = 1000, backoff = 2, name = "Operation", onFailedAttempt = null } = options;
@@ -40,7 +41,7 @@ function retryOperation(operation, options = {}) {
 }
 
 function setupTableNameSearch(parent) {
-  const schemaService = new SchemaStorageService();
+  const schemaStorageService = new SchemaStorageService();
   const tableNameInput = document.getElementById("tableNameInput");
 
   // Disable browser's default suggestions
@@ -122,7 +123,7 @@ function setupTableNameSearch(parent) {
     dropdownContainer.style.display = "none";
 
     // Load the schema if it exists
-    const schema = schemaService.loadSchema(fullName);
+    const schema = schemaStorageService.loadSchema(fullName);
     if (schema) {
       parent.schemaTable.loadData(schema);
       parent.dataTable.loadData([[], []]);
@@ -150,7 +151,7 @@ function setupTableNameSearch(parent) {
   function handleKeyDown(event) {
     if (dropdownContainer.style.display === "none" && event.key === "ArrowDown") {
       // If dropdown is hidden and down arrow is pressed, show recent items
-      const results = schemaService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
+      const results = schemaStorageService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
       showDropdown(results);
       selectedIndex = -1;
       return;
@@ -193,7 +194,7 @@ function setupTableNameSearch(parent) {
 
     if (!input) {
       // Show recent items if input is empty
-      const results = schemaService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
+      const results = schemaStorageService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
       showDropdown(results);
       return;
     }
@@ -203,8 +204,8 @@ function setupTableNameSearch(parent) {
     // Validate each part
     if (parts.length > 1) {
       const [schema, table] = parts;
-      const isValidSchema = schemaService.validateOracleName(schema, "schema");
-      const isValidTable = table ? schemaService.validateOracleName(table, "table") : true;
+      const isValidSchema = schemaStorageService.validateOracleName(schema, "schema");
+      const isValidTable = table ? schemaStorageService.validateOracleName(table, "table") : true;
 
       if (!isValidSchema || !isValidTable) {
         tableNameInput.style.borderColor = "red";
@@ -212,7 +213,7 @@ function setupTableNameSearch(parent) {
         return;
       }
     } else {
-      const isValidSchema = schemaService.validateOracleName(parts[0], "schema");
+      const isValidSchema = schemaStorageService.validateOracleName(parts[0], "schema");
       if (!isValidSchema) {
         tableNameInput.style.borderColor = "red";
         dropdownContainer.style.display = "none";
@@ -220,7 +221,7 @@ function setupTableNameSearch(parent) {
       }
     }
 
-    const results = schemaService.searchSavedSchemas(input);
+    const results = schemaStorageService.searchSavedSchemas(input);
     showDropdown(results);
   }
 
@@ -238,7 +239,8 @@ function setupTableNameSearch(parent) {
 }
 
 export function initQuickQuery(container, updateHeaderTitle) {
-  const schemaService = new SchemaStorageService();
+  const schemaStorageService = new SchemaStorageService();
+  const schemaValidationService = new SchemaValidationService();
   const parent = {
     schemaTable: null,
     dataTable: null,
@@ -589,6 +591,14 @@ export function initQuickQuery(container, updateHeaderTitle) {
         throw new Error("Table name format should be 'schema_name.table_name'.");
       }
 
+      // Validate schema and data fields
+      if (!isValidSchemaAndDataFields(schemaData, inputData)) {
+        throw new Error(error.message);
+      }
+
+      // Save schema to local storage
+      schemaStorageService.saveSchema(tableName, schemaData);
+
       // Generate the query
       const query = generateQuery(tableName, queryType, schemaData, inputData);
 
@@ -654,7 +664,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Export button
     exportButton.addEventListener("click", () => {
-      const allTables = schemaService.getAllTables();
+      const allTables = schemaStorageService.getAllTables();
       if (allTables.length === 0) {
         showError("No schemas to export");
         return;
@@ -664,7 +674,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
     // Clear All button
     clearAllButton.addEventListener("click", () => {
-      const allTables = schemaService.getAllTables();
+      const allTables = schemaStorageService.getAllTables();
       if (allTables.length === 0) {
         showError("No schemas to clear");
         return;
@@ -681,7 +691,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function updateSavedSchemasList() {
     const schemasList = document.getElementById("savedSchemasList");
-    const allTables = schemaService.getAllTables();
+    const allTables = schemaStorageService.getAllTables();
 
     if (allTables.length === 0) {
       schemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
@@ -754,7 +764,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function handleLoadSchema(fullName) {
-    const schema = schemaService.loadSchema(fullName);
+    const schema = schemaStorageService.loadSchema(fullName);
     if (schema) {
       document.getElementById("tableNameInput").value = fullName;
       schemaTable.loadData(schema);
@@ -774,7 +784,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
   function handleDeleteSchema(fullName) {
     if (confirm(`Delete schema for ${fullName}?`)) {
-      const deleted = schemaService.deleteSchema(fullName);
+      const deleted = schemaStorageService.deleteSchema(fullName);
       if (deleted) {
         updateSavedSchemasList();
 
@@ -790,7 +800,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function handleClearAllSchemas() {
-    const schemaCleared = schemaService.clearAllSchemas();
+    const schemaCleared = schemaStorageService.clearAllSchemas();
     if (schemaCleared) {
       showSuccess("All saved schemas have been cleared");
     } else {
@@ -826,7 +836,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
         Object.entries(jsonData).forEach(([schemaName, tables]) => {
           Object.entries(tables).forEach(([tableName, schema]) => {
             const fullTableName = `${schemaName}.${tableName}`;
-            if (schemaService.saveSchema(fullTableName, schema)) {
+            if (schemaStorageService.saveSchema(fullTableName, schema)) {
               importCount++;
             }
           });
@@ -868,12 +878,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function exportSchemas() {
-    const allTables = schemaService.getAllTables();
+    const allTables = schemaStorageService.getAllTables();
     const exportData = {};
 
     // Group by schema and table
     allTables.forEach((table) => {
-      const schema = schemaService.loadSchema(table.fullName);
+      const schema = schemaStorageService.loadSchema(table.fullName);
       if (schema) {
         // Initialize schema if needed
         if (!exportData[table.schemaName]) {
@@ -946,113 +956,28 @@ export function initQuickQuery(container, updateHeaderTitle) {
     }
   }
 
-  function validateSchema(schemaData) {
-    // Check for empty schema
-    if (schemaData.length === 0) {
-      throw new Error("Schema Validation Error:<br>Please fill in the schema (see the left panel).");
+  function isValidSchemaAndDataFields(schemaData, inputData) {
+    // Validate schema
+    try {
+      console.log(schemaData.length);
+      schemaValidationService.validateSchema(schemaData);
+    } catch (error) {
+      throw new Error(error.message);
     }
+    console.log("Schema validated");
 
-    // Check for DBeaver format
-    if (schemaData[0][0] === "Column Name") {
-      adjustDbeaverSchema(schemaData);
-      showWarning("Schema data adjusted from DBeaver to SQL Developer format.");
-      setTimeout(() => clearError(), 3000);
-      return true;
+    // match schema field with data field name
+    try {
+      schemaValidationService.matchSchemaWithData(schemaData, inputData);
+    } catch (error) {
+      throw new Error(error.message);
     }
-
-    // Track invalid entries
-    const invalidDataTypes = [];
-    const invalidNullableValues = [];
-
-    // Validate each row in the schema once
-    schemaData.forEach((row) => {
-      const [fieldName, dataType, nullable] = row;
-
-      // Validate data type
-      if (!isValidOracleDataType(dataType)) {
-        invalidDataTypes.push(`${dataType} (in field ${fieldName})`);
-      }
-
-      // Validate nullable values
-      if (!isValidNullableDataType(nullable)) {
-        invalidNullableValues.push(`${nullable} (in field ${fieldName})`);
-      }
-    });
-
-    // Build error message if any validations failed
-    if (invalidDataTypes.length > 0 || invalidNullableValues.length > 0) {
-      const errors = [];
-
-      if (invalidDataTypes.length > 0) {
-        errors.push(`Invalid Oracle SQL Data Types: ${invalidDataTypes.join(", ")}`);
-      }
-
-      if (invalidNullableValues.length > 0) {
-        errors.push(`Invalid nullable values: ${invalidNullableValues.join(", ")}. Must be 'Yes', 'No', or 'PK'`);
-      }
-
-      throw new Error(`Schema Validation Error:<br>${errors.join("<br>")}`);
-    }
-
-    return true;
-  }
-
-  function isValidOracleDataType(dataType) {
-    const validTypes = ["NUMBER", "VARCHAR", "VARCHAR2", "DATE", "TIMESTAMP", "CHAR", "CLOB", "BLOB"];
-    return validTypes.some((type) => dataType.toUpperCase().startsWith(type));
-  }
-
-  function isValidNullableDataType(nullable) {
-    const validValues = ["Yes", "No", "PK", "yes", "no", "pk", "Y", "N", "y", "n"];
-    return validValues.includes(nullable);
-  }
-
-  function matchSchemaWithData(schemaData, inputData) {
-    const hasSchemaData = schemaData.some((row) => row.some((cell) => cell !== null && cell !== ""));
-    const hasFieldNames = inputData[0]?.some((cell) => cell !== null && cell !== "");
-    const hasFirstDataRow = inputData[1]?.some((cell) => cell !== null && cell !== "");
-
-    if (!hasSchemaData || !hasFieldNames || !hasFirstDataRow) {
-      throw new Error("Incomplete data. Please fill in both schema and data sheets.");
-    }
-
-    const schemaFieldNames = schemaData.map((row) => row[0].toLowerCase());
-    const inputFieldNames = inputData[0].map((field) => field?.toLowerCase());
-
-    // Check for empty field names in data input
-    const emptyColumnIndex = inputFieldNames.findIndex((field) => !field);
-    if (emptyColumnIndex !== -1) {
-      throw new Error(`Field Name Error:<br>Empty field name found in data input at column ${emptyColumnIndex + 1}`);
-    }
-
-    // Find mismatches in both directions
-    const missingInSchema = inputFieldNames.filter((field) => !schemaFieldNames.includes(field));
-    const missingInData = schemaFieldNames.filter((field) => !inputFieldNames.includes(field));
-
-    if (missingInSchema.length > 0 || missingInData.length > 0) {
-      const errors = [];
-      if (missingInSchema.length > 0) {
-        errors.push(`Fields in data but not in schema: ${missingInSchema.join(", ")}`);
-      }
-      if (missingInData.length > 0) {
-        errors.push(`Fields in schema but not in data: ${missingInData.join(", ")}`);
-      }
-      throw new Error(`Field Mismatch Error:<br>${errors.join("<br>")}`);
-    }
+    console.log("Schema and data fields matched");
 
     return true;
   }
 
   function generateQuery(tableName, queryType, schemaData, inputData) {
-    // 1. Validate schema
-    validateSchema(schemaData);
-    console.log("Schema validated");
-    schemaService.saveSchema(tableName, schemaData); // Save schema to local storage
-
-    // 2. Match schema and data fields
-    matchSchemaWithData(schemaData, inputData);
-    console.log("Schema and data fields matched");
-
     // 3. Get field names from first row of input data
     const fieldNames = inputData[0].map((name) => name.toLowerCase());
     console.log("Field names extracted");
@@ -1736,10 +1661,10 @@ export function initQuickQuery(container, updateHeaderTitle) {
                 setupTableNameSearch(parent);
 
                 // Try to load most recent schema from local storage
-                const allTables = schemaService.getAllTables();
+                const allTables = schemaStorageService.getAllTables();
                 if (allTables.length > 0) {
                   const mostRecent = allTables[0];
-                  const schema = schemaService.loadSchema(mostRecent.fullName);
+                  const schema = schemaStorageService.loadSchema(mostRecent.fullName);
                   if (schema) {
                     document.getElementById("tableNameInput").value = mostRecent.fullName;
                     schemaTable.loadData(schema);
