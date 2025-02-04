@@ -3,7 +3,7 @@ const ORACLE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_$#]*$/;
 const MAX_SCHEMA_LENGTH = 30;
 const MAX_TABLE_LENGTH = 128;
 
-class SchemaStorageService {
+export class SchemaStorageService {
   constructor() {
     this.STORAGE_KEY = STORAGE_KEY;
   }

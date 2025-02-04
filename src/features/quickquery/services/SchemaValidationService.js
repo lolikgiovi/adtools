@@ -91,3 +91,10 @@ export class SchemaValidationService {
     return true;
   }
 }
+
+export function isDbeaverSchema(schemaData) {
+  if (schemaData[0][0] === "Column Name") {
+    return true;
+  }
+  return false;
+}
