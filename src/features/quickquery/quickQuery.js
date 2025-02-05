@@ -1,8 +1,10 @@
 import { copyToClipboard } from "../../utils/buttons.js";
-import { quickQueryErrorHtmlPage, quickQueryMainHtmlPage, quickQueryTutorialHtmlPage } from "./quickquery.template.js";
+import { quickQueryErrorHtmlPage, quickQueryMainHtmlPage } from "./quickquery.template.js";
 import { SchemaStorageService } from "./services/SchemaStorageService.js";
 import { SchemaValidationService, isDbeaverSchema } from "./services/SchemaValidationService.js";
 import { QueryGenerationService } from "./services/QueryGenerationService.js";
+import { DependencyLoader } from "../../utils/dependencyLoader.js";
+import { sampleSchema1, sampleData1 } from "./quickquery.constants.js";
 
 function retryOperation(operation, options = {}) {
   const { retries = 3, delay = 1000, backoff = 2, name = "Operation", onFailedAttempt = null } = options;
@@ -126,7 +128,7 @@ function setupTableNameSearch(parent) {
     const schema = schemaStorageService.loadSchema(fullName);
     if (schema) {
       parent.schemaTable.loadData(schema);
-      parent.dataTable.loadData([[], []]);
+      // parent.dataTable.loadData([[], []]);
       parent.updateDataSpreadsheet();
       parent.handleAddFieldNames();
       parent.clearError();
@@ -242,6 +244,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   const schemaStorageService = new SchemaStorageService();
   const schemaValidationService = new SchemaValidationService();
   const queryGenerationService = new QueryGenerationService();
+  const dependencyLoader = new DependencyLoader();
   const parent = {
     schemaTable: null,
     dataTable: null,
@@ -249,6 +252,12 @@ export function initQuickQuery(container, updateHeaderTitle) {
     handleAddFieldNames: null,
     clearError: null,
   };
+
+  loadQuickQueryDependencies();
+  async function loadQuickQueryDependencies() {
+    dependencyLoader.loadDependency("handsontable");
+    dependencyLoader.loadDependency("codemirror");
+  }
 
   // Business Logics
   function initializeSchemaTable() {
@@ -349,6 +358,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function updateDataSpreadsheet() {
     const schemaData = schemaTable.getData().filter((row) => row[0]);
     const columnCount = schemaData.length;
+    const currentData = dataTable.getData();
 
     // Generate alphabetical field headers
     const columnHeaders = Array.from({ length: columnCount }, (_, i) => String.fromCharCode(65 + i));
@@ -358,8 +368,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
       columns: Array(columnCount).fill({ type: "text" }),
       minCols: columnCount,
     });
-
-    const currentData = dataTable.getData();
 
     // If there's no data or less than two rows, create two empty rows
     if (currentData.length < 2) {
@@ -439,41 +447,17 @@ export function initQuickQuery(container, updateHeaderTitle) {
   }
 
   function handleSimulationFillSchema() {
-    // Fill the table name input
     document.getElementById("tableNameInput").value = "schema_name.table_name";
-
-    // Fill the data
-    const sampleData = [
-      ["TABLE_ID", "VARCHAR2(36)", "PK", "", "1"],
-      ["DESC_ID", "VARCHAR2(500)", "PK", "", "2"],
-      ["DESC_EN", "VARCHAR2(500)", "No", "", "3"],
-      ["AMOUNT", "NUMBER(15,2)", "Yes", "", "4"],
-      ["SEQUENCE", "NUMBER(3,0)", "No", "", "5"],
-      ["IS_ACTIVE", "NUMBER", "No", "", "6"],
-      ["CREATED_TIME", "TIMESTAMP(6)", "No", "", "7"],
-      ["CREATED_BY", "VARCHAR2(36)", "No", "", "8"],
-      ["UPDATED_TIME", "TIMESTAMP(6)", "No", "", "9"],
-      ["UPDATED_BY", "VARCHAR2(36)", "No", "", "10"],
-    ];
-
-    schemaTable.loadData(sampleData);
+    schemaTable.loadData(sampleSchema1);
   }
 
   function handleSimulationFillData() {
-    dataTable.loadData([
-      ["TABLE_ID", "DESC_ID", "DESC_EN", "AMOUNT", "SEQUENCE", "IS_ACTIVE", "CREATED_TIME", "CREATED_BY", "UPDATED_TIME", "UPDATED_BY"],
-      ["TABLE_ID_1", "DESC_ID_1", "DESC_EN_1", "100000", "1", "1", "CREATED_TIME_1", "CREATED_BY_1", "UPDATED_TIME_1", "UPDATED_BY_1"],
-      ["TABLE_ID_2", "DESC_ID_2", "DESC_EN_2", "", "2", "1", "CREATED_TIME_2", "CREATED_BY_2", "UPDATED_TIME_2", "UPDATED_BY_2"],
-    ]);
-
+    dataTable.loadData(sampleData1);
     updateDataSpreadsheet();
   }
 
   function handleSimulationGenerateQuery() {
-    // Generate the query
     handleGenerateQuery();
-
-    // Hide the guide
     handleToggleGuide();
   }
 
@@ -488,7 +472,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     let tableName = tableNameInput.value.trim();
 
     // Sanitize the filename
-    const sanitizedTableName = tableName.replace(/[^a-z0-9_.]/gi, "_").toLowerCase();
+    const sanitizedTableName = tableName.replace(/[^a-z0-9_.]/gi, "_").toUpperCase();
     const filename = `${sanitizedTableName}.sql`;
 
     const blob = new Blob([sql], { type: "text/plain" });
@@ -517,8 +501,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
   function handleAddFieldNames() {
     const schemaData = schemaTable.getData().filter((row) => row[0]);
     const fieldNames = schemaData.map((row) => row[0]);
-
-    // Get the current data from dataTable
     const currentData = dataTable.getData();
 
     // Set the first row to the field names
@@ -598,10 +580,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
         throw new Error("Schema data adjusted from DBeaver to SQL Developer format. Please refill the data sheet.");
       }
 
-      // Validate schema and data fields
-      if (!isValidSchemaAndDataFields(schemaData, inputData)) {
-        throw new Error(error.message);
-      }
+      schemaValidationService.validateSchema(schemaData);
+      schemaValidationService.matchSchemaWithData(schemaData, inputData);
 
       // Save schema to local storage
       schemaStorageService.saveSchema(tableName, schemaData);
@@ -775,7 +755,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
     if (schema) {
       document.getElementById("tableNameInput").value = fullName;
       schemaTable.loadData(schema);
-      dataTable.loadData([[], []]);
+      // dataTable.loadData([[], []]);
       updateDataSpreadsheet();
       handleAddFieldNames();
 
@@ -851,7 +831,7 @@ export function initQuickQuery(container, updateHeaderTitle) {
 
         // Update UI
         updateSavedSchemasList();
-        showError(`Successfully imported ${importCount} table schemas`);
+        showSuccess(`Successfully imported ${importCount} table schemas`);
         // clear after 3 seconds
         setTimeout(() => clearError(), 3000);
       } catch (error) {
@@ -960,27 +940,6 @@ export function initQuickQuery(container, updateHeaderTitle) {
         console.error("Error updating schema table:", error);
       }
     }
-  }
-
-  function isValidSchemaAndDataFields(schemaData, inputData) {
-    // Validate schema
-    try {
-      console.log(schemaData.length);
-      schemaValidationService.validateSchema(schemaData);
-    } catch (error) {
-      throw new Error(error.message);
-    }
-    console.log("Schema validated");
-
-    // match schema field with data field name
-    try {
-      schemaValidationService.matchSchemaWithData(schemaData, inputData);
-    } catch (error) {
-      throw new Error(error.message);
-    }
-    console.log("Schema and data fields matched");
-
-    return true;
   }
 
   // Constants

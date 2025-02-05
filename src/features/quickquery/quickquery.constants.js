@@ -141,3 +141,22 @@ export const oracleDateFormats = {
     oracleFormat: "MM/DD/YYYY HH24:MI:SS.FF6",
   },
 };
+
+export const sampleSchema1 = [
+  ["TABLE_ID", "VARCHAR2(36)", "PK", "", "1"],
+  ["DESC_ID", "VARCHAR2(500)", "PK", "", "2"],
+  ["DESC_EN", "VARCHAR2(500)", "No", "", "3"],
+  ["AMOUNT", "NUMBER(15,2)", "Yes", "", "4"],
+  ["SEQUENCE", "NUMBER(3,0)", "No", "", "5"],
+  ["IS_ACTIVE", "NUMBER", "No", "", "6"],
+  ["CREATED_TIME", "TIMESTAMP(6)", "No", "", "7"],
+  ["CREATED_BY", "VARCHAR2(36)", "No", "", "8"],
+  ["UPDATED_TIME", "TIMESTAMP(6)", "No", "", "9"],
+  ["UPDATED_BY", "VARCHAR2(36)", "No", "", "10"],
+];
+
+export const sampleData1 = [
+  ["TABLE_ID", "DESC_ID", "DESC_EN", "AMOUNT", "SEQUENCE", "IS_ACTIVE", "CREATED_TIME", "CREATED_BY", "UPDATED_TIME", "UPDATED_BY"],
+  ["TABLE_ID_1", "DESC_ID_1", "DESC_EN_1", "100000", "1", "1", "CREATED_TIME_1", "CREATED_BY_1", "UPDATED_TIME_1", "UPDATED_BY_1"],
+  ["TABLE_ID_2", "DESC_ID_2", "DESC_EN_2", "", "2", "1", "CREATED_TIME_2", "CREATED_BY_2", "UPDATED_TIME_2", "UPDATED_BY_2"],
+];
