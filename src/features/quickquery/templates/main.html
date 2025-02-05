@@ -1,0 +1,69 @@
+<div class="tool-container quick-query-tool-container">
+    <div class="quick-query-content">
+        <div class="content-a">
+            <div class="quick-query-left-panel">
+                <div class="button-group">
+                    <select id="queryTypeSelect">
+                        <option value="merge">MERGE INTO</option>
+                        <option value="insert">INSERT INTO</option>
+                    </select>
+                    <input type="text" id="tableNameInput" placeholder="schema_name.table_name"
+                        value="schema_name.table_name">
+                </div>
+                <div class="button-group quick-query-left-controls">
+                    <button id="showSavedSchemas">Manage Saved Schemas</button>
+                    <button id="addNewSchemaRow">Add row</button>
+                    <button id="removeLastSchemaRow">Remove last row</button>
+                    <button id="clearAll">Clear All</button>
+                    <button id="generateQuery">Generate Query</button>
+                </div>
+
+                <div id="spreadsheet-schema"></div>
+
+                <div id="guideContainer">
+                </div>
+            </div>
+            <div class="quick-query-right-panel">
+                <div class="button-group quick-query-right-controls">
+                    <button id="toggleWordWrap">Word Wrap: Off</button>
+                    <button id="copySQL">Copy SQL</button>
+                    <button id="downloadSQL">Download SQL</button>
+                </div>
+                <div id="warningMessages"></div>
+                <div id="errorMessages"></div>
+                <div id="queryEditor" class="quick-query-content-area"></div>
+            </div>
+        </div>
+        <div class="content-b">
+            <div class="button-group">
+                <h3>Data Input</h3>
+                <p>Note: First row of data must be field names.</p>
+                <div class="simulate-buttons">
+                    <button id="addFieldNames">Add field names from schema</button>
+                    <button id="addDataRow">Add Row</button>
+                    <button id="removeDataRow">Remove Last Row</button>
+                    <button id="clearData">Clear Data</button>
+                </div>
+            </div>
+            <div id="spreadsheet-data"></div>
+        </div>
+    </div>
+</div>
+
+<div id="schemaOverlay" class="schema-overlay hidden">
+    <div class="schema-modal">
+        <div class="schema-modal-header">
+            <h3>Saved Schemas</h3>
+            <div class="schema-modal-actions">
+                <button id="clearAllSchemas" class="action-button">Clear All</button>
+                <button id="exportSchemas" class="action-button">Export</button>
+                <button id="importSchemas" class="action-button">Import</button>
+                <button id="closeSchemaOverlay" class="overlay-close-button">&times;</button>
+            </div>
+            <input type="file" id="schemaFileInput" accept=".json" style="display: none;">
+        </div>
+        <div class="schema-modal-content">
+            <div id="savedSchemasList"></div>
+        </div>
+    </div>
+</div>

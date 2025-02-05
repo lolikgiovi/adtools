@@ -3,6 +3,7 @@
   flex-direction: column;
   min-height: calc(100vh - 100px);
   overflow: visible;
+  position: relative;
 }
 
 .quick-query-controls .button-group {
@@ -20,7 +21,7 @@
 .content-a {
   display: flex;
   flex: 1 0 auto; /* Allow it to grow but not shrink */
-  min-height: 550px;
+  min-height: calc(80vh - 80px); /* 80% of container's height (100vh - 100px) */
   position: relative;
 }
 

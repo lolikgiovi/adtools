@@ -24,8 +24,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--background-color);
   color: var(--text-color);
   min-height: 100vh;
@@ -120,8 +119,7 @@ button {
   background-color: var(--secondary-color);
   color: white;
   cursor: pointer;
-  transition: background-color var(--transition-speed),
-    opacity var(--transition-speed);
+  transition: background-color var(--transition-speed), opacity var(--transition-speed);
 }
 
 button:hover {
@@ -168,8 +166,7 @@ textarea {
   color: var(--header-text-color);
   cursor: pointer;
   font-size: 1rem;
-  transition: background-color var(--transition-speed),
-    color var(--transition-speed);
+  transition: background-color var(--transition-speed), color var(--transition-speed);
 }
 
 #main-nav button:hover {

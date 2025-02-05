@@ -1,5 +1,5 @@
 import { ValueProcessorService } from "./ValueProcessorService.js";
-import { oracleReservedWords } from "../quickquery.constants.js";
+import { oracleReservedWords } from "../constants/Constants.js";
 
 export class QueryGenerationService {
   constructor() {

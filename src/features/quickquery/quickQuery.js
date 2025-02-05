@@ -1,11 +1,11 @@
 import { copyToClipboard } from "../../utils/buttons.js";
-import { quickQueryMainHtmlPage } from "./quickquery.template.js";
-import { SchemaStorageService } from "./services/SchemaStorageService.js";
+import { getQuickQueryMainHtmlPage, getQuickQueryTutorialHtmlPage } from "./constants/Templates.js";
+import { LocalStorageService } from "./services/LocalStorageService.js";
 import { QueryGenerationService } from "./services/QueryGenerationService.js";
 import { SchemaValidationService, isDbeaverSchema } from "./services/SchemaValidationService.js";
 import { DependencyLoader } from "../../utils/dependencyLoader.js";
-import { sampleSchema1, sampleData1 } from "./quickquery.constants.js";
-import { initialSchemaTableSpecification, initialDataTableSpecification } from "./quickquery.constants.js";
+import { sampleSchema1, sampleData1 } from "./constants/Constants.js";
+import { initialSchemaTableSpecification, initialDataTableSpecification } from "./constants/Constants.js";
 
 export class QuickQueryUI {
   constructor(container, updateHeaderTitle) {
@@ -15,9 +15,10 @@ export class QuickQueryUI {
     this.schemaTable = null;
     this.dataTable = null;
     this.elements = {};
-    this.schemaStorageService = new SchemaStorageService();
+    this.localStorageService = new LocalStorageService();
     this.schemaValidationService = new SchemaValidationService();
     this.queryGenerationService = new QueryGenerationService();
+    this.isGuideActive = false;
 
     // Initialize search state
     this.searchState = {
@@ -28,7 +29,10 @@ export class QuickQueryUI {
 
   async init() {
     try {
-      this.container.innerHTML = quickQueryMainHtmlPage;
+      this.container.innerHTML = await getQuickQueryMainHtmlPage();
+      if (this.isGuideActive) {
+        document.getElementById("guideContainer").innerHTML = await getQuickQueryTutorialHtmlPage();
+      }
       this.bindElements();
       this.clearError();
       await DependencyLoader.loadDependency("handsontable");
@@ -177,7 +181,7 @@ export class QuickQueryUI {
       exportSchemas: {
         event: "click",
         handler: () => {
-          const allTables = this.schemaStorageService.getAllTables();
+          const allTables = this.localStorageService.getAllTables();
           if (allTables.length === 0) {
             this.showError("No schemas to export");
             return;
@@ -188,7 +192,7 @@ export class QuickQueryUI {
       clearAllSchemas: {
         event: "click",
         handler: () => {
-          const allTables = this.schemaStorageService.getAllTables();
+          const allTables = this.localStorageService.getAllTables();
           if (allTables.length === 0) {
             this.showError("No schemas to clear");
             return;
@@ -322,7 +326,7 @@ export class QuickQueryUI {
       this.schemaValidationService.validateSchema(schemaData);
       this.schemaValidationService.matchSchemaWithData(schemaData, inputData);
 
-      this.schemaStorageService.saveSchema(tableName, schemaData);
+      this.localStorageService.saveSchema(tableName, schemaData);
 
       const query = this.queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData);
 
@@ -464,7 +468,7 @@ export class QuickQueryUI {
   }
 
   handleClearAllSchemas() {
-    const schemaCleared = this.schemaStorageService.clearAllSchemas();
+    const schemaCleared = this.localStorageService.clearAllSchemas();
     if (schemaCleared) {
       this.showSuccess("All saved schemas have been cleared");
     } else {
@@ -474,7 +478,7 @@ export class QuickQueryUI {
 
   // Schema management methods
   updateSavedSchemasList() {
-    const allTables = this.schemaStorageService.getAllTables();
+    const allTables = this.localStorageService.getAllTables();
 
     if (allTables.length === 0) {
       this.elements.savedSchemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
@@ -542,7 +546,7 @@ export class QuickQueryUI {
   }
 
   handleLoadSchema(fullName) {
-    const schema = this.schemaStorageService.loadSchema(fullName);
+    const schema = this.localStorageService.loadSchema(fullName);
     if (schema) {
       this.elements.tableNameInput.value = fullName;
       this.schemaTable.loadData(schema);
@@ -557,7 +561,7 @@ export class QuickQueryUI {
 
   handleDeleteSchema(fullName) {
     if (confirm(`Delete schema for ${fullName}?`)) {
-      const deleted = this.schemaStorageService.deleteSchema(fullName);
+      const deleted = this.localStorageService.deleteSchema(fullName);
       if (deleted) {
         this.updateSavedSchemasList();
 
@@ -572,11 +576,11 @@ export class QuickQueryUI {
   }
 
   exportSchemas() {
-    const allTables = this.schemaStorageService.getAllTables();
+    const allTables = this.localStorageService.getAllTables();
     const exportData = {};
 
     allTables.forEach((table) => {
-      const schema = this.schemaStorageService.loadSchema(table.fullName);
+      const schema = this.localStorageService.loadSchema(table.fullName);
       if (schema) {
         if (!exportData[table.schemaName]) {
           exportData[table.schemaName] = {};
@@ -645,7 +649,7 @@ export class QuickQueryUI {
     this.elements.tableNameInput.style.borderColor = "";
 
     if (!input) {
-      const results = this.schemaStorageService.searchSavedSchemas("").slice(0, 7);
+      const results = this.localStorageService.searchSavedSchemas("").slice(0, 7);
       this.showSearchDropdown(results);
       return;
     }
@@ -655,13 +659,13 @@ export class QuickQueryUI {
       return;
     }
 
-    const results = this.schemaStorageService.searchSavedSchemas(input);
+    const results = this.localStorageService.searchSavedSchemas(input);
     this.showSearchDropdown(results);
   }
 
   handleSearchKeyDown(event) {
     if (this.elements.dropdownContainer.style.display === "none" && event.key === "ArrowDown") {
-      const results = this.schemaStorageService.searchSavedSchemas("").slice(0, 7);
+      const results = this.localStorageService.searchSavedSchemas("").slice(0, 7);
       this.showSearchDropdown(results);
       this.searchState.selectedIndex = -1;
       return;
@@ -673,10 +677,10 @@ export class QuickQueryUI {
   }
 
   loadMostRecentSchema() {
-    const allTables = this.schemaStorageService.getAllTables();
+    const allTables = this.localStorageService.getAllTables();
     if (allTables.length > 0) {
       const mostRecent = allTables[0];
-      const schema = this.schemaStorageService.loadSchema(mostRecent.fullName);
+      const schema = this.localStorageService.loadSchema(mostRecent.fullName);
       if (schema) {
         this.elements.tableNameInput.value = mostRecent.fullName;
         this.schemaTable.loadData(schema);
@@ -707,7 +711,7 @@ export class QuickQueryUI {
         Object.entries(jsonData).forEach(([schemaName, tables]) => {
           Object.entries(tables).forEach(([tableName, schema]) => {
             const fullTableName = `${schemaName}.${tableName}`;
-            if (this.schemaStorageService.saveSchema(fullTableName, schema)) {
+            if (this.localStorageService.saveSchema(fullTableName, schema)) {
               importCount++;
             }
           });
@@ -763,7 +767,7 @@ export class QuickQueryUI {
     });
 
     this.elements.exportSchemasButton.addEventListener("click", () => {
-      const allTables = this.schemaStorageService.getAllTables();
+      const allTables = this.localStorageService.getAllTables();
       if (allTables.length === 0) {
         this.showError("No schemas to export");
         return;
@@ -772,7 +776,7 @@ export class QuickQueryUI {
     });
 
     this.elements.clearAllSchemasButton.addEventListener("click", () => {
-      const allTables = this.schemaStorageService.getAllTables();
+      const allTables = this.localStorageService.getAllTables();
       if (allTables.length === 0) {
         this.showError("No schemas to clear");
         return;

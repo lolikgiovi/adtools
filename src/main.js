@@ -4,7 +4,7 @@ import { DependencyLoader } from "./utils/dependencyLoader.js";
 document.addEventListener("DOMContentLoaded", async () => {
   await DependencyLoader.loadAll();
   console.log("DOM fully loaded");
-  
+
   const app = new App();
   app.init();
 
