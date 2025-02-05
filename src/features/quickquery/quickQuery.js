@@ -56,8 +56,40 @@ export class QuickQueryUI {
 
   async initializeComponents() {
     try {
-      this.schemaTable = new Handsontable(this.elements.schemaContainer, initialSchemaTableSpecification);
-      this.dataTable = new Handsontable(this.elements.dataContainer, initialDataTableSpecification);
+      const schemaTableConfig = {
+        ...initialSchemaTableSpecification,
+        afterChange: (changes) => {
+          if (changes) {
+            this.updateDataSpreadsheet();
+            this.handleAddFieldNames();
+          }
+        },
+        afterGetColHeader: function (col, TH) {
+          const header = TH.querySelector(".colHeader");
+          if (header) {
+            header.style.fontWeight = "bold";
+          }
+        },
+      };
+      this.schemaTable = new Handsontable(this.elements.schemaContainer, schemaTableConfig);
+
+      const dataTableConfig = {
+        ...initialDataTableSpecification,
+        afterChange: (changes, source) => {
+          if (!changes || source === "loadData") return; // Skip if no changes or if change is from loading data
+
+          const tableName = this.elements.tableNameInput.value.trim();
+          if (!tableName) return; // Skip if no table name
+
+          // Only save if there are actual changes
+          if (changes.length > 0) {
+            const currentData = this.dataTable.getData();
+            this.localStorageService.updateTableData(tableName, currentData);
+          }
+        },
+      };
+
+      this.dataTable = new Handsontable(this.elements.dataContainer, dataTableConfig);
       this.initializeEditor();
     } catch (error) {
       throw new Error(`Failed to initialize components: ${error.message}`);
@@ -665,7 +697,10 @@ export class QuickQueryUI {
     }
 
     const parts = input.split(".");
-    if (!this.validateSearchInput(parts)) {
+    if (
+      !this.localStorageService.validateOracleName(parts[0], "schema") ||
+      !this.localStorageService.validateOracleName(parts[1], "table")
+    ) {
       return;
     }
 
