@@ -2,6 +2,7 @@ const STORAGE_KEY = "quickquery_schemas";
 const ORACLE_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_$#]*$/;
 const MAX_SCHEMA_LENGTH = 30;
 const MAX_TABLE_LENGTH = 128;
+const MAX_CACHED_ROWS = 100;
 
 export class LocalStorageService {
   constructor() {
@@ -48,7 +49,7 @@ export class LocalStorageService {
   }
 
   // Schema Management Functions
-  saveSchema(fullTableName, schemaData) {
+  saveSchema(fullTableName, schemaData, tableData = null) {
     try {
       const { schemaName, tableName } = this.parseTableIdentifier(fullTableName);
       const storageData = this.getStorageData();
@@ -59,6 +60,7 @@ export class LocalStorageService {
 
       storageData.schemas[schemaName].tables[tableName] = {
         schema: schemaData,
+        data: tableData ? tableData.slice(0, MAX_CACHED_ROWS) : null,
         timestamp: new Date().toISOString(),
       };
 
@@ -69,14 +71,44 @@ export class LocalStorageService {
     }
   }
 
-  loadSchema(fullTableName) {
+  loadSchema(fullTableName, includeData = false) {
     try {
       const { schemaName, tableName } = this.parseTableIdentifier(fullTableName);
       const storageData = this.getStorageData();
-      return storageData.schemas[schemaName]?.tables[tableName]?.schema || null;
+      const tableInfo = storageData.schemas[schemaName]?.tables[tableName];
+
+      if (!tableInfo) return null;
+
+      if (!includeData) {
+        return tableInfo.schema;
+      }
+
+      return {
+        schema: tableInfo.schema,
+        data: tableInfo.data || null,
+      };
     } catch (error) {
       console.error("Error loading schema:", error);
       return null;
+    }
+  }
+
+  updateTableData(fullTableName, tableData) {
+    try {
+      const { schemaName, tableName } = this.parseTableIdentifier(fullTableName);
+      const storageData = this.getStorageData();
+
+      if (!storageData.schemas[schemaName]?.tables[tableName]) {
+        return false;
+      }
+
+      storageData.schemas[schemaName].tables[tableName].data = tableData.slice(0, MAX_CACHED_ROWS);
+      storageData.schemas[schemaName].tables[tableName].timestamp = new Date().toISOString();
+
+      return this.saveStorageData(storageData);
+    } catch (error) {
+      console.error("Error updating table data:", error);
+      return false;
     }
   }
 

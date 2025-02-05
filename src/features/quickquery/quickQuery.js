@@ -18,7 +18,7 @@ export class QuickQueryUI {
     this.localStorageService = new LocalStorageService();
     this.schemaValidationService = new SchemaValidationService();
     this.queryGenerationService = new QueryGenerationService();
-    this.isGuideActive = false;
+    this.isGuideActive = true;
 
     // Initialize search state
     this.searchState = {
@@ -41,7 +41,7 @@ export class QuickQueryUI {
       this.setupEventListeners();
       this.setupTableNameSearch();
       this.loadMostRecentSchema();
-      this.createSchemaOverlay();
+      this.setupSchemaImport();
     } catch (error) {
       console.error("Failed to initialize Quick Query:", error);
       if (this.elements.errorMessages) {
@@ -163,6 +163,10 @@ export class QuickQueryUI {
         event: "click",
         handler: () => this.handleRemoveLastSchemaRow(),
       },
+      clearData: {
+        event: "click",
+        handler: () => this.handleClearData(),
+      },
 
       // Schema overlay handlers
       showSavedSchemas: {
@@ -199,6 +203,7 @@ export class QuickQueryUI {
           }
           if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
             this.handleClearAllSchemas();
+            this.elements.schemaOverlay.classList.add("hidden");
           }
         },
       },
@@ -275,21 +280,10 @@ export class QuickQueryUI {
 
   showSuccess(message) {
     if (this.elements.warningMessages) {
-      this.elements.warningMessages.innerHTML = message;
-      this.elements.warningMessages.style.display = "block";
-      this.elements.warningMessages.style.color = "green";
+      this.elements.errorMessages.innerHTML = message;
+      this.elements.errorMessages.style.display = "block";
+      this.elements.errorMessages.style.color = "green";
     }
-  }
-
-  showSuccess(message) {
-    const successMessagesDiv = document.createElement("div");
-    successMessagesDiv.className = "success-message";
-    successMessagesDiv.textContent = message;
-    this.container.appendChild(successMessagesDiv);
-
-    setTimeout(() => {
-      successMessagesDiv.remove();
-    }, 3000);
   }
 
   clearError() {
@@ -326,7 +320,7 @@ export class QuickQueryUI {
       this.schemaValidationService.validateSchema(schemaData);
       this.schemaValidationService.matchSchemaWithData(schemaData, inputData);
 
-      this.localStorageService.saveSchema(tableName, schemaData);
+      this.localStorageService.saveSchema(tableName, schemaData, inputData);
 
       const query = this.queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData);
 
@@ -454,6 +448,14 @@ export class QuickQueryUI {
     this.dataTable.loadData(newData);
   }
 
+  handleClearData() {
+    const schemaData = this.schemaTable.getData().filter((row) => row[0]);
+    const fieldNames = schemaData.map((row) => row[0]);
+    const newData = [fieldNames, Array(fieldNames.length).fill(null)];
+
+    this.dataTable.loadData(newData);
+  }
+
   handleAddNewSchemaRow() {
     const currentData = this.schemaTable.getData();
     const newRow = Array(6).fill(null);
@@ -546,12 +548,20 @@ export class QuickQueryUI {
   }
 
   handleLoadSchema(fullName) {
-    const schema = this.localStorageService.loadSchema(fullName);
-    if (schema) {
+    const result = this.localStorageService.loadSchema(fullName, true);
+    if (result) {
       this.elements.tableNameInput.value = fullName;
-      this.schemaTable.loadData(schema);
+      this.schemaTable.loadData(result.schema);
       this.updateDataSpreadsheet();
-      this.handleAddFieldNames();
+
+      // Load cached data if available
+      if (result.data) {
+        this.dataTable.loadData(result.data);
+      } else {
+        this.handleAddFieldNames();
+        this.handleClearData();
+      }
+
       this.elements.schemaOverlay.classList.add("hidden");
       this.clearError();
     } else {
@@ -676,16 +686,110 @@ export class QuickQueryUI {
     }
   }
 
+  showSearchDropdown(results) {
+    const dropdownContainer = this.elements.dropdownContainer;
+    dropdownContainer.innerHTML = "";
+    this.searchState.visibleItems = [];
+    this.searchState.selectedIndex = -1;
+
+    if (results.length === 0) {
+      dropdownContainer.style.display = "none";
+      return;
+    }
+
+    const groupedResults = results.reduce((groups, table) => {
+      if (!groups[table.schemaName]) {
+        groups[table.schemaName] = [];
+      }
+      groups[table.schemaName].push(table);
+      return groups;
+    }, {});
+
+    Object.entries(groupedResults).forEach(([schemaName, tables]) => {
+      const schemaGroup = document.createElement("div");
+      schemaGroup.className = "schema-group";
+
+      const schemaHeader = document.createElement("div");
+      schemaHeader.className = "schema-header";
+      schemaHeader.textContent = schemaName;
+      schemaGroup.appendChild(schemaHeader);
+
+      tables.forEach((table) => {
+        const item = document.createElement("div");
+        item.className = "search-result-item";
+        item.textContent = table.tableName;
+
+        // Store the full table name for easy access
+        item.dataset.fullName = table.fullName;
+
+        // Add to visible items array for keyboard navigation
+        this.searchState.visibleItems.push(item);
+
+        item.addEventListener("click", () => this.selectSearchResult(table.fullName));
+
+        schemaGroup.appendChild(item);
+      });
+
+      dropdownContainer.appendChild(schemaGroup);
+    });
+
+    dropdownContainer.style.display = "block";
+  }
+
+  selectSearchResult(fullName) {
+    this.elements.tableNameInput.value = fullName;
+    this.elements.dropdownContainer.style.display = "none";
+    this.handleLoadSchema(fullName);
+
+    // Reset selection
+    this.searchState.selectedIndex = -1;
+    this.elements.tableNameInput.focus();
+  }
+
+  handleDropdownNavigation(event) {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        this.searchState.selectedIndex = Math.min(this.searchState.selectedIndex + 1, this.searchState.visibleItems.length - 1);
+        this.updateSearchSelection();
+        break;
+
+      case "ArrowUp":
+        event.preventDefault();
+        this.searchState.selectedIndex = Math.max(this.searchState.selectedIndex - 1, -1);
+        this.updateSearchSelection();
+        break;
+
+      case "Enter":
+        event.preventDefault();
+        if (this.searchState.selectedIndex >= 0 && this.searchState.selectedIndex < this.searchState.visibleItems.length) {
+          this.selectSearchResult(this.searchState.visibleItems[this.searchState.selectedIndex].dataset.fullName);
+        }
+        break;
+
+      case "Escape":
+        this.elements.dropdownContainer.style.display = "none";
+        this.searchState.selectedIndex = -1;
+        break;
+    }
+  }
+
+  updateSearchSelection() {
+    this.searchState.visibleItems.forEach((item, index) => {
+      if (index === this.searchState.selectedIndex) {
+        item.classList.add("selected");
+        item.scrollIntoView({ block: "nearest" });
+      } else {
+        item.classList.remove("selected");
+      }
+    });
+  }
+
   loadMostRecentSchema() {
     const allTables = this.localStorageService.getAllTables();
     if (allTables.length > 0) {
       const mostRecent = allTables[0];
-      const schema = this.localStorageService.loadSchema(mostRecent.fullName);
-      if (schema) {
-        this.elements.tableNameInput.value = mostRecent.fullName;
-        this.schemaTable.loadData(schema);
-        this.updateDataSpreadsheet();
-      }
+      this.handleLoadSchema(mostRecent.fullName);
     }
   }
 
@@ -750,43 +854,49 @@ export class QuickQueryUI {
     });
   }
 
-  createSchemaOverlay() {
-    this.elements.showSavedSchemasButton.addEventListener("click", () => {
-      this.elements.schemaOverlay.classList.remove("hidden");
-      this.updateSavedSchemasList();
+  adjustDbeaverSchema(schemaData) {
+    console.log("Adjusting schema data");
+
+    // Remove the header row
+    const removedHeader = schemaData.slice(1);
+
+    // Transform the data
+    const adjustedSchemaData = removedHeader.map((row) => {
+      // Original DBeaver format:
+      // [0]: Column Name
+      // [1]: Column Type
+      // [2]: Type Name
+      // [3]: Column Size
+      // [4]: Nullable
+      // [5]: Default Value
+      // [6]: Comments
+
+      // Transform nullable from TRUE/FALSE to No/Yes
+      const nullable = String(row[4]).toLowerCase() === "true" ? "No" : "Yes";
+
+      // Transform [NULL] to empty string
+      const defaultValue = row[5] === "[NULL]" ? "" : row[5];
+
+      return [
+        row[0], // [0] Field Name (same as Column Name)
+        row[2], // [1] Data Type (use Type Name instead of Column Type)
+        nullable, // [2] Nullable/PK
+        defaultValue, // [3] Default Value
+        row[1] || "", // [4] Field Order (use Column Type as order)
+        row[6] || "", // [5] Comments
+      ];
     });
 
-    this.elements.closeSchemaOverlayButton.addEventListener("click", () => {
-      this.elements.schemaOverlay.classList.add("hidden");
-    });
-
-    this.elements.schemaOverlay.addEventListener("click", (e) => {
-      if (e.target === this.elements.schemaOverlay) {
-        this.elements.schemaOverlay.classList.add("hidden");
+    // Update the schemaTable with the new data
+    if (this.schemaTable && typeof this.schemaTable.loadData === "function") {
+      try {
+        // Clear existing data and load new data
+        this.schemaTable.loadData(adjustedSchemaData);
+        this.updateDataSpreadsheet();
+      } catch (error) {
+        console.error("Error updating schema table:", error);
       }
-    });
-
-    this.elements.exportSchemasButton.addEventListener("click", () => {
-      const allTables = this.localStorageService.getAllTables();
-      if (allTables.length === 0) {
-        this.showError("No schemas to export");
-        return;
-      }
-      this.exportSchemas();
-    });
-
-    this.elements.clearAllSchemasButton.addEventListener("click", () => {
-      const allTables = this.localStorageService.getAllTables();
-      if (allTables.length === 0) {
-        this.showError("No schemas to clear");
-        return;
-      }
-      if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
-        this.handleClearAllSchemas();
-      }
-    });
-
-    this.setupSchemaImport();
+    }
   }
 }
 
