@@ -160,3 +160,82 @@ export const sampleData1 = [
   ["TABLE_ID_1", "DESC_ID_1", "DESC_EN_1", "100000", "1", "1", "CREATED_TIME_1", "CREATED_BY_1", "UPDATED_TIME_1", "UPDATED_BY_1"],
   ["TABLE_ID_2", "DESC_ID_2", "DESC_EN_2", "", "2", "1", "CREATED_TIME_2", "CREATED_BY_2", "UPDATED_TIME_2", "UPDATED_BY_2"],
 ];
+
+export const initialSchemaTableSpecification = {
+  data: [["", "", "", ""]], // empty data
+  colHeaders: ["Field Name", "Data Type", "Nullable/PK", "Default", "Field Order", "Comments"],
+  columns: [
+    {
+      renderer: function (instance, td, row, col, prop, value, cellProperties) {
+        Handsontable.renderers.TextRenderer.apply(this, arguments);
+        td.style.fontWeight = "bold";
+      },
+    },
+    {},
+    {
+      type: "dropdown",
+      source: ["Yes", "No", "PK"],
+      validator: function (value, callback) {
+        callback(["Yes", "No", "PK", "yes", "no", "pk", "Yes", "No", "Pk", "Y", "N", "y", "n"].includes(value));
+      },
+      renderer: function (instance, td, row, col, prop, value, cellProperties) {
+        Handsontable.renderers.DropdownRenderer.apply(this, arguments);
+        td.style.textAlign = "center";
+      },
+    },
+    {},
+    {
+      type: "numeric",
+      validator: function (value, callback) {
+        callback(value === null || value === "" || !isNaN(parseFloat(value)));
+      },
+      renderer: function (instance, td, row, col, prop, value, cellProperties) {
+        Handsontable.renderers.NumericRenderer.apply(this, arguments);
+        td.style.textAlign = "center";
+      },
+    },
+    {},
+  ],
+  height: "auto",
+  licenseKey: "non-commercial-and-evaluation",
+  minCols: 6,
+  minRows: 1,
+  contextMenu: true,
+  mergeCells: true,
+  manualColumnResize: true,
+  afterChange: (changes) => {
+    if (changes) {
+      this.updateDataSpreadsheet();
+    }
+  },
+  afterGetColHeader: function (col, TH) {
+    const header = TH.querySelector(".colHeader");
+    if (header) {
+      header.style.fontWeight = "bold";
+    }
+  },
+};
+
+export const initialDataTableSpecification = {
+  data: [[], []],
+  colHeaders: true,
+  rowHeaders: true,
+  height: "auto",
+  licenseKey: "non-commercial-and-evaluation",
+  minCols: 1,
+  contextMenu: true,
+  manualColumnResize: true,
+  stretchH: "none",
+  className: "hide-scrollbar",
+  cells: function (row, col) {
+    const cellProperties = {};
+    if (row === 0) {
+      cellProperties.renderer = function (instance, td, row, col, prop, value, cellProperties) {
+        Handsontable.renderers.TextRenderer.apply(this, arguments);
+        td.style.fontWeight = "bold";
+        td.style.textAlign = "center";
+      };
+    }
+    return cellProperties;
+  },
+};

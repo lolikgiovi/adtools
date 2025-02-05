@@ -1,477 +1,373 @@
 import { copyToClipboard } from "../../utils/buttons.js";
-import { quickQueryErrorHtmlPage, quickQueryMainHtmlPage } from "./quickquery.template.js";
+import { quickQueryMainHtmlPage } from "./quickquery.template.js";
 import { SchemaStorageService } from "./services/SchemaStorageService.js";
-import { SchemaValidationService, isDbeaverSchema } from "./services/SchemaValidationService.js";
 import { QueryGenerationService } from "./services/QueryGenerationService.js";
+import { SchemaValidationService, isDbeaverSchema } from "./services/SchemaValidationService.js";
 import { DependencyLoader } from "../../utils/dependencyLoader.js";
 import { sampleSchema1, sampleData1 } from "./quickquery.constants.js";
+import { initialSchemaTableSpecification, initialDataTableSpecification } from "./quickquery.constants.js";
 
-function retryOperation(operation, options = {}) {
-  const { retries = 3, delay = 1000, backoff = 2, name = "Operation", onFailedAttempt = null } = options;
+export class QuickQueryUI {
+  constructor(container, updateHeaderTitle) {
+    this.container = container;
+    this.updateHeaderTitle = updateHeaderTitle;
+    this.editor = null;
+    this.schemaTable = null;
+    this.dataTable = null;
+    this.elements = {};
+    this.schemaStorageService = new SchemaStorageService();
+    this.schemaValidationService = new SchemaValidationService();
+    this.queryGenerationService = new QueryGenerationService();
 
-  return new Promise((resolve, reject) => {
-    let attempt = 0;
-
-    function tryOperation() {
-      operation()
-        .then((result) => {
-          if (attempt > 0) {
-            console.log(`${name} succeeded on attempt ${attempt + 1}`);
-          }
-          resolve(result);
-        })
-        .catch((error) => {
-          if (attempt < retries - 1) {
-            const waitTime = delay * Math.pow(backoff, attempt);
-            console.warn(`${name} failed, attempt ${attempt + 1}/${retries}. Retrying in ${waitTime}ms...`);
-
-            if (onFailedAttempt) {
-              onFailedAttempt(error, attempt + 1, retries);
-            }
-
-            attempt++;
-            setTimeout(tryOperation, waitTime);
-          } else {
-            console.error(`${name} failed after ${retries} attempts`);
-            reject(error);
-          }
-        });
-    }
-
-    tryOperation();
-  });
-}
-
-function setupTableNameSearch(parent) {
-  const schemaStorageService = new SchemaStorageService();
-  const tableNameInput = document.getElementById("tableNameInput");
-
-  // Disable browser's default suggestions
-  tableNameInput.setAttribute("autocomplete", "off");
-  tableNameInput.setAttribute("autocorrect", "off");
-  tableNameInput.setAttribute("autocapitalize", "off");
-  tableNameInput.setAttribute("spellcheck", "false");
-
-  // Create a container div and wrap it around the input
-  const container = document.createElement("div");
-  container.className = "table-search-container";
-  tableNameInput.parentNode.insertBefore(container, tableNameInput);
-  container.appendChild(tableNameInput);
-
-  // Create dropdown container
-  const dropdownContainer = document.createElement("div");
-  dropdownContainer.className = "table-search-dropdown";
-  dropdownContainer.style.display = "none";
-  container.appendChild(dropdownContainer);
-
-  // Keep track of selected item
-  let selectedIndex = -1;
-  let visibleItems = [];
-
-  function showDropdown(results) {
-    dropdownContainer.innerHTML = "";
-    visibleItems = [];
-    selectedIndex = -1;
-
-    if (results.length === 0) {
-      dropdownContainer.style.display = "none";
-      return;
-    }
-
-    const groupedResults = results.reduce((groups, table) => {
-      if (!groups[table.schemaName]) {
-        groups[table.schemaName] = [];
-      }
-      groups[table.schemaName].push(table);
-      return groups;
-    }, {});
-
-    Object.entries(groupedResults).forEach(([schemaName, tables]) => {
-      const schemaGroup = document.createElement("div");
-      schemaGroup.className = "schema-group";
-
-      const schemaHeader = document.createElement("div");
-      schemaHeader.className = "schema-header";
-      schemaHeader.textContent = schemaName;
-      schemaGroup.appendChild(schemaHeader);
-
-      tables.forEach((table) => {
-        const item = document.createElement("div");
-        item.className = "search-result-item";
-        item.textContent = table.tableName;
-
-        // Store the full table name for easy access
-        item.dataset.fullName = table.fullName;
-
-        // Add to visible items array for keyboard navigation
-        visibleItems.push(item);
-
-        item.addEventListener("click", function () {
-          selectResult(table.fullName);
-        });
-
-        schemaGroup.appendChild(item);
-      });
-
-      dropdownContainer.appendChild(schemaGroup);
-    });
-
-    dropdownContainer.style.display = "block";
+    // Initialize search state
+    this.searchState = {
+      selectedIndex: -1,
+      visibleItems: [],
+    };
   }
 
-  function selectResult(fullName) {
-    // Set the input value
-    tableNameInput.value = fullName;
-    dropdownContainer.style.display = "none";
-
-    // Load the schema if it exists
-    const schema = schemaStorageService.loadSchema(fullName);
-    if (schema) {
-      parent.schemaTable.loadData(schema);
-      // parent.dataTable.loadData([[], []]);
-      parent.updateDataSpreadsheet();
-      parent.handleAddFieldNames();
-      parent.clearError();
-    }
-
-    // Reset selection
-    selectedIndex = -1;
-    tableNameInput.focus();
-  }
-
-  function updateSelection() {
-    visibleItems.forEach((item, index) => {
-      if (index === selectedIndex) {
-        item.classList.add("selected");
-        item.scrollIntoView({ block: "nearest" });
+  async init() {
+    try {
+      this.container.innerHTML = quickQueryMainHtmlPage;
+      this.bindElements();
+      this.clearError();
+      await DependencyLoader.loadDependency("handsontable");
+      await DependencyLoader.loadDependency("codemirror");
+      await this.initializeComponents();
+      this.setupEventListeners();
+      this.setupTableNameSearch();
+      this.loadMostRecentSchema();
+      this.createSchemaOverlay();
+    } catch (error) {
+      console.error("Failed to initialize Quick Query:", error);
+      if (this.elements.errorMessages) {
+        console.log(error.message);
       } else {
-        item.classList.remove("selected");
+        console.error("Error elements not bound yet:", error);
+        this.container.innerHTML = `<div class="error-message">Failed to initialize: ${error.message || "Unknown error"}</div>`;
       }
-    });
+      throw error;
+    }
   }
 
-  function handleKeyDown(event) {
-    if (dropdownContainer.style.display === "none" && event.key === "ArrowDown") {
-      // If dropdown is hidden and down arrow is pressed, show recent items
-      const results = schemaStorageService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
-      showDropdown(results);
-      selectedIndex = -1;
-      return;
+  async initializeComponents() {
+    try {
+      this.schemaTable = new Handsontable(this.elements.schemaContainer, initialSchemaTableSpecification);
+      this.dataTable = new Handsontable(this.elements.dataContainer, initialDataTableSpecification);
+      this.initializeEditor();
+    } catch (error) {
+      throw new Error(`Failed to initialize components: ${error.message}`);
     }
+  }
 
-    if (dropdownContainer.style.display === "block") {
-      switch (event.key) {
-        case "ArrowDown":
-          event.preventDefault();
-          selectedIndex = Math.min(selectedIndex + 1, visibleItems.length - 1);
-          updateSelection();
-          break;
+  bindElements() {
+    this.elements = {
+      // Input elements
+      tableNameInput: document.getElementById("tableNameInput"),
+      queryTypeSelect: document.getElementById("queryTypeSelect"),
+      schemaFileInput: document.getElementById("schemaFileInput"),
 
-        case "ArrowUp":
-          event.preventDefault();
-          selectedIndex = Math.max(selectedIndex - 1, -1);
-          updateSelection();
-          break;
+      // Schema editor elements
+      schemaContainer: document.getElementById("spreadsheet-schema"),
+      dataContainer: document.getElementById("spreadsheet-data"),
 
-        case "Enter":
-          event.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < visibleItems.length) {
-            selectResult(visibleItems[selectedIndex].dataset.fullName);
+      // Message and display elements
+      errorMessages: document.getElementById("errorMessages"),
+      warningMessages: document.getElementById("warningMessages"),
+      guide: document.getElementById("guide"),
+
+      // Schema overlay elements
+      schemaOverlay: document.getElementById("schemaOverlay"),
+      savedSchemasList: document.getElementById("savedSchemasList"),
+
+      // Buttons
+      toggleGuideButton: document.getElementById("toggleGuide"),
+      guideContent: document.getElementById("guide"),
+      toggleWordWrapButton: document.getElementById("toggleWordWrap"),
+      showSavedSchemasButton: document.getElementById("showSavedSchemas"),
+      closeSchemaOverlayButton: document.getElementById("closeSchemaOverlay"),
+      exportSchemasButton: document.getElementById("exportSchemas"),
+      clearAllSchemasButton: document.getElementById("clearAllSchemas"),
+      importSchemasButton: document.getElementById("importSchemas"),
+
+      // Container elements
+      tableSearchContainer: null,
+      dropdownContainer: null,
+    };
+  }
+
+  setupEventListeners() {
+    const EVENT_HANDLERS = {
+      // Query generation and manipulation
+      generateQuery: {
+        event: "click",
+        handler: () => this.handleGenerateQuery(),
+      },
+      copySQL: {
+        event: "click",
+        handler: (event) => copyToClipboard(this.editor.getValue(), event.target),
+      },
+      clearAll: {
+        event: "click",
+        handler: () => this.handleClearAll(),
+      },
+      downloadSQL: {
+        event: "click",
+        handler: () => this.handleDownloadSql(),
+      },
+      toggleWordWrap: {
+        event: "click",
+        handler: () => this.handleToggleWordWrap(),
+      },
+
+      // Guide and simulation handlers
+      toggleGuide: {
+        event: "click",
+        handler: () => this.handleToggleGuide(),
+      },
+      simulationFillSchemaButton: {
+        event: "click",
+        handler: () => this.handleSimulationFillSchema(),
+      },
+      simulationFillDataButton: {
+        event: "click",
+        handler: () => this.handleSimulationFillData(),
+      },
+      simulationGenerateQueryButton: {
+        event: "click",
+        handler: () => this.handleSimulationGenerateQuery(),
+      },
+
+      // Data manipulation handlers
+      addFieldNames: {
+        event: "click",
+        handler: () => this.handleAddFieldNames(),
+      },
+      addDataRow: {
+        event: "click",
+        handler: () => this.handleAddDataRow(),
+      },
+      removeDataRow: {
+        event: "click",
+        handler: () => this.handleRemoveDataRow(),
+      },
+      addNewSchemaRow: {
+        event: "click",
+        handler: () => this.handleAddNewSchemaRow(),
+      },
+      removeLastSchemaRow: {
+        event: "click",
+        handler: () => this.handleRemoveLastSchemaRow(),
+      },
+
+      // Schema overlay handlers
+      showSavedSchemas: {
+        event: "click",
+        handler: () => {
+          this.elements.schemaOverlay.classList.remove("hidden");
+          this.updateSavedSchemasList();
+        },
+      },
+      closeSchemaOverlay: {
+        event: "click",
+        handler: () => {
+          this.elements.schemaOverlay.classList.add("hidden");
+        },
+      },
+      exportSchemas: {
+        event: "click",
+        handler: () => {
+          const allTables = this.schemaStorageService.getAllTables();
+          if (allTables.length === 0) {
+            this.showError("No schemas to export");
+            return;
           }
-          break;
+          this.exportSchemas();
+        },
+      },
+      clearAllSchemas: {
+        event: "click",
+        handler: () => {
+          const allTables = this.schemaStorageService.getAllTables();
+          if (allTables.length === 0) {
+            this.showError("No schemas to clear");
+            return;
+          }
+          if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
+            this.handleClearAllSchemas();
+          }
+        },
+      },
 
-        case "Escape":
-          dropdownContainer.style.display = "none";
-          selectedIndex = -1;
-          break;
-      }
-    }
-  }
+      // Query type selection
+      queryTypeSelect: {
+        event: "change",
+        handler: () => this.handleGenerateQuery(),
+      },
+    };
 
-  function handleInput(event) {
-    const input = event.target.value.trim();
-
-    // Clear any previous error styling
-    tableNameInput.style.borderColor = "";
-
-    if (!input) {
-      // Show recent items if input is empty
-      const results = schemaStorageService.searchSavedSchemas("").slice(0, 7); // Get 7 most recent
-      showDropdown(results);
-      return;
-    }
-
-    const parts = input.split(".");
-
-    // Validate each part
-    if (parts.length > 1) {
-      const [schema, table] = parts;
-      const isValidSchema = schemaStorageService.validateOracleName(schema, "schema");
-      const isValidTable = table ? schemaStorageService.validateOracleName(table, "table") : true;
-
-      if (!isValidSchema || !isValidTable) {
-        tableNameInput.style.borderColor = "red";
-        dropdownContainer.style.display = "none";
+    Object.entries(EVENT_HANDLERS).forEach(([id, config]) => {
+      const element = document.getElementById(id);
+      if (!element) {
+        console.warn(`Element with id '${id}' not found`);
         return;
       }
-    } else {
-      const isValidSchema = schemaStorageService.validateOracleName(parts[0], "schema");
-      if (!isValidSchema) {
-        tableNameInput.style.borderColor = "red";
-        dropdownContainer.style.display = "none";
-        return;
+
+      if (Array.isArray(config)) {
+        config.forEach(({ event, handler }) => {
+          element.addEventListener(event, handler);
+        });
+      } else {
+        const { event, handler } = config;
+        element.addEventListener(event, handler);
       }
-    }
-
-    const results = schemaStorageService.searchSavedSchemas(input);
-    showDropdown(results);
+    });
   }
 
-  // Event Listeners
-  tableNameInput.addEventListener("input", handleInput);
-  tableNameInput.addEventListener("keydown", handleKeyDown);
-
-  // Close dropdown when clicking outside
-  document.addEventListener("click", (event) => {
-    if (!container.contains(event.target)) {
-      dropdownContainer.style.display = "none";
-      selectedIndex = -1;
-    }
-  });
-}
-
-export function initQuickQuery(container, updateHeaderTitle) {
-  const schemaStorageService = new SchemaStorageService();
-  const schemaValidationService = new SchemaValidationService();
-  const queryGenerationService = new QueryGenerationService();
-  const dependencyLoader = new DependencyLoader();
-  const parent = {
-    schemaTable: null,
-    dataTable: null,
-    updateDataSpreadsheet: null,
-    handleAddFieldNames: null,
-    clearError: null,
-  };
-
-  loadQuickQueryDependencies();
-  async function loadQuickQueryDependencies() {
-    dependencyLoader.loadDependency("handsontable");
-    dependencyLoader.loadDependency("codemirror");
-  }
-
-  // Business Logics
-  function initializeSchemaTable() {
-    const schemaContainer = document.getElementById("spreadsheet-schema");
-    const data = [["", "", "", ""]];
-    schemaTable = new Handsontable(schemaContainer, {
-      data: data,
-      colHeaders: ["Field Name", "Data Type", "Nullable/PK", "Default", "Field Order", "Comments"],
-      columns: [
-        {
-          // Field Name
-          renderer: function (instance, td, row, col, prop, value, cellProperties) {
-            Handsontable.renderers.TextRenderer.apply(this, arguments);
-            td.style.fontWeight = "bold";
-          },
-        },
-        {}, // Data Type
-        {
-          // Nullable/PK
-          type: "dropdown",
-          source: ["Yes", "No", "PK"],
-          validator: function (value, callback) {
-            callback(["Yes", "No", "PK", "yes", "no", "pk", "Yes", "No", "Pk", "Y", "N", "y", "n"].includes(value));
-          },
-          renderer: function (instance, td, row, col, prop, value, cellProperties) {
-            Handsontable.renderers.DropdownRenderer.apply(this, arguments);
-            td.style.textAlign = "center";
-          },
-        },
-        {}, // Default
-        {
-          // Field Order
-          type: "numeric",
-          validator: function (value, callback) {
-            callback(value === null || value === "" || !isNaN(parseFloat(value)));
-          },
-          renderer: function (instance, td, row, col, prop, value, cellProperties) {
-            Handsontable.renderers.NumericRenderer.apply(this, arguments);
-            td.style.textAlign = "center";
-          },
-        },
-        {}, // Comments
-      ],
-      height: "auto",
-      licenseKey: "non-commercial-and-evaluation",
-      minCols: 6,
-      minRows: 1,
-      contextMenu: true,
-      mergeCells: true,
-      manualColumnResize: true,
-      afterChange: (changes) => {
-        if (changes) {
-          updateDataSpreadsheet();
-        }
-      },
-      afterGetColHeader: function (col, TH) {
-        const header = TH.querySelector(".colHeader");
-        if (header) {
-          header.style.fontWeight = "bold";
-        }
-      },
+  initializeEditor() {
+    this.editor = CodeMirror(document.getElementById("queryEditor"), {
+      mode: "text/x-sql",
+      theme: "material",
+      lineNumbers: true,
+      readOnly: false,
+      viewportMargin: Infinity,
+      lineWrapping: false,
     });
 
-    parent.schemaTable = schemaTable;
-
-    initializeDataTable();
+    setTimeout(() => this.editor.refresh(), 0);
   }
 
-  function initializeDataTable() {
-    const dataContainer = document.getElementById("spreadsheet-data");
-    dataTable = new Handsontable(dataContainer, {
-      data: [[], []],
-      colHeaders: true,
-      rowHeaders: true,
-      height: "auto",
-      licenseKey: "non-commercial-and-evaluation",
-      minCols: 1,
-      contextMenu: true,
-      manualColumnResize: true,
-      stretchH: "none", // allow horizontal scroll
-      className: "hide-scrollbar", //custom css class to hide scroll
-      cells: function (row, col) {
-        const cellProperties = {};
-        if (row === 0) {
-          cellProperties.renderer = function (instance, td, row, col, prop, value, cellProperties) {
-            Handsontable.renderers.TextRenderer.apply(this, arguments);
-            td.style.fontWeight = "bold";
-            td.style.textAlign = "center";
-          };
-        }
-        return cellProperties;
-      },
-    });
-
-    parent.dataTable = dataTable;
-  }
-
-  function updateDataSpreadsheet() {
-    const schemaData = schemaTable.getData().filter((row) => row[0]);
+  updateDataSpreadsheet() {
+    const schemaData = this.schemaTable.getData().filter((row) => row[0]);
     const columnCount = schemaData.length;
-    const currentData = dataTable.getData();
+    const currentData = this.dataTable.getData();
 
-    // Generate alphabetical field headers
     const columnHeaders = Array.from({ length: columnCount }, (_, i) => String.fromCharCode(65 + i));
 
-    dataTable.updateSettings({
+    this.dataTable.updateSettings({
       colHeaders: columnHeaders,
       columns: Array(columnCount).fill({ type: "text" }),
       minCols: columnCount,
     });
 
-    // If there's no data or less than two rows, create two empty rows
     if (currentData.length < 2) {
       const newData = [Array(columnCount).fill(null), Array(columnCount).fill(null)];
-      dataTable.loadData(newData);
+      this.dataTable.loadData(newData);
     } else {
-      // Ensure existing data has the correct number of columns
       const newData = currentData.map((row) => {
         return row.slice(0, columnCount).concat(Array(Math.max(0, columnCount - row.length)).fill(null));
       });
-      dataTable.loadData(newData);
+      this.dataTable.loadData(newData);
     }
   }
-  parent.updateDataSpreadsheet = updateDataSpreadsheet;
 
-  function initializeEditor() {
-    editor = CodeMirror(document.getElementById("queryEditor"), {
-      mode: "text/x-sql",
-      theme: "material",
-      lineNumbers: true,
-      readOnly: false,
-      viewportMargin: Infinity, // Enable auto-height
-      lineWrapping: false, // Start with word wrap disabled
-    });
+  // Error handling methods
+  showError(message) {
+    if (this.elements.errorMessages) {
+      this.elements.errorMessages.innerHTML = message;
+      this.elements.errorMessages.style.display = "block";
+    }
+  }
 
-    console.log("Editor initialized");
-    // Refresh the editor to adjust its height
-    setTimeout(() => editor.refresh(), 0);
+  showSuccess(message) {
+    if (this.elements.warningMessages) {
+      this.elements.warningMessages.innerHTML = message;
+      this.elements.warningMessages.style.display = "block";
+      this.elements.warningMessages.style.color = "green";
+    }
+  }
+
+  showSuccess(message) {
+    const successMessagesDiv = document.createElement("div");
+    successMessagesDiv.className = "success-message";
+    successMessagesDiv.textContent = message;
+    this.container.appendChild(successMessagesDiv);
+
+    setTimeout(() => {
+      successMessagesDiv.remove();
+    }, 3000);
+  }
+
+  clearError() {
+    if (this.elements.errorMessages && this.elements.warningMessages) {
+      this.elements.errorMessages.textContent = "";
+      this.elements.warningMessages.textContent = "";
+      this.elements.errorMessages.style.display = "none";
+      this.elements.warningMessages.style.display = "none";
+    }
   }
 
   // Event Handlers
-  function handleAddDataRow() {
-    const currentData = dataTable.getData();
-    const schemaData = schemaTable.getData().filter((row) => row[0]);
-    const columnCount = schemaData.length;
-    const newRow = Array(columnCount).fill(null);
-    const newData = [...currentData, newRow];
-    dataTable.loadData(newData);
-  }
+  handleGenerateQuery() {
+    try {
+      const tableName = this.elements.tableNameInput.value.trim();
+      const queryType = this.elements.queryTypeSelect.value;
 
-  function handleRemoveDataRow() {
-    // Get current data
-    const currentData = dataTable.getData();
+      const schemaData = this.schemaTable.getData().filter((row) => row[0]);
+      const inputData = this.dataTable.getData();
 
-    // Remove the last row
-    const newData = currentData.slice(0, -1);
+      if (!tableName) {
+        throw new Error("Please fill in schema_name.table_name.");
+      }
 
-    // Load the new data into the table
-    dataTable.loadData(newData);
-  }
+      if (!tableName.includes(".")) {
+        throw new Error("Table name format should be 'schema_name.table_name'.");
+      }
 
-  function handleAddNewSchemaRow() {
-    const currentData = schemaTable.getData();
-    const newRow = Array(6).fill(null);
-    const newData = [...currentData, newRow];
-    schemaTable.loadData(newData);
-  }
+      if (isDbeaverSchema(schemaData)) {
+        this.adjustDbeaverSchema(schemaData);
+        throw new Error("Schema data adjusted from DBeaver to SQL Developer format. Please refill the data sheet.");
+      }
 
-  function handleRemoveLastSchemaRow() {
-    const currentData = schemaTable.getData();
-    const newData = currentData.slice(0, -1);
-    schemaTable.loadData(newData);
-  }
+      this.schemaValidationService.validateSchema(schemaData);
+      this.schemaValidationService.matchSchemaWithData(schemaData, inputData);
 
-  function handleToggleGuide() {
-    const guideContent = document.getElementById("guide");
-    const toggleButton = document.getElementById("toggleGuide");
-    console.log("Toggle Guide pressed");
+      this.schemaStorageService.saveSchema(tableName, schemaData);
 
-    if (guideContent.classList.contains("hidden")) {
-      guideContent.classList.remove("hidden");
-      toggleButton.textContent = "Hide";
-    } else {
-      guideContent.classList.add("hidden");
-      toggleButton.textContent = "Tutorial & Simulation";
+      const query = this.queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData);
+
+      this.editor.setValue(query);
+      this.clearError();
+    } catch (error) {
+      this.showError(error.message);
+      this.editor.setValue("");
     }
   }
 
-  function handleSimulationFillSchema() {
-    document.getElementById("tableNameInput").value = "schema_name.table_name";
-    schemaTable.loadData(sampleSchema1);
+  handleClearAll() {
+    this.elements.tableNameInput.value = "";
+
+    if (this.schemaTable) {
+      this.schemaTable.updateSettings({
+        data: [["", "", "", ""]],
+        colHeaders: ["Field Name", "Data Type", "Nullable/PK", "Default", "Field Order", "Comments"],
+      });
+    }
+
+    if (this.dataTable) {
+      this.dataTable.updateSettings({
+        data: [[], []],
+        colHeaders: true,
+        minCols: 1,
+      });
+    }
+
+    if (this.editor) {
+      this.editor.setValue("");
+    }
+
+    this.clearError();
+    this.elements.queryTypeSelect.value = "merge";
   }
 
-  function handleSimulationFillData() {
-    dataTable.loadData(sampleData1);
-    updateDataSpreadsheet();
-  }
-
-  function handleSimulationGenerateQuery() {
-    handleGenerateQuery();
-    handleToggleGuide();
-  }
-
-  function handleDownloadSql() {
-    const sql = editor.getValue();
+  handleDownloadSql() {
+    const sql = this.editor.getValue();
     if (!sql) {
-      showError("No SQL to download. Please generate a query first.");
+      this.showError("No SQL to download. Please generate a query first.");
       return;
     }
 
-    const tableNameInput = document.getElementById("tableNameInput");
-    let tableName = tableNameInput.value.trim();
-
-    // Sanitize the filename
+    let tableName = this.elements.tableNameInput.value.trim();
     const sanitizedTableName = tableName.replace(/[^a-z0-9_.]/gi, "_").toUpperCase();
     const filename = `${sanitizedTableName}.sql`;
 
@@ -486,206 +382,105 @@ export function initQuickQuery(container, updateHeaderTitle) {
     URL.revokeObjectURL(url);
   }
 
-  function handleToggleWordWrap() {
+  handleToggleWordWrap() {
     const wordWrapButton = document.getElementById("toggleWordWrap");
-    const currentState = editor.getOption("lineWrapping");
+    const currentState = this.editor.getOption("lineWrapping");
     const newState = !currentState;
 
-    editor.setOption("lineWrapping", newState);
+    this.editor.setOption("lineWrapping", newState);
     wordWrapButton.textContent = `Word Wrap: ${newState ? "On" : "Off"}`;
-
-    // Refresh the editor to adjust its layout
-    editor.refresh();
+    this.editor.refresh();
   }
 
-  function handleAddFieldNames() {
-    const schemaData = schemaTable.getData().filter((row) => row[0]);
-    const fieldNames = schemaData.map((row) => row[0]);
-    const currentData = dataTable.getData();
+  handleToggleGuide() {
+    if (this.elements.guideContent.classList.contains("hidden")) {
+      this.elements.guideContent.classList.remove("hidden");
+      this.elements.toggleGuideButton.textContent = "Hide";
+    } else {
+      this.elements.guideContent.classList.add("hidden");
+      this.elements.toggleGuideButton.textContent = "Tutorial & Simulation";
+    }
+  }
 
-    // Set the first row to the field names
+  handleSimulationFillSchema() {
+    this.elements.tableNameInput.value = "schema_name.table_name";
+    this.schemaTable.loadData(sampleSchema1);
+  }
+
+  handleSimulationFillData() {
+    this.dataTable.loadData(sampleData1);
+    this.updateDataSpreadsheet();
+  }
+
+  handleSimulationGenerateQuery() {
+    this.handleGenerateQuery();
+    this.handleToggleGuide();
+  }
+
+  handleAddFieldNames() {
+    const schemaData = this.schemaTable.getData().filter((row) => row[0]);
+    const fieldNames = schemaData.map((row) => row[0]);
+    const currentData = this.dataTable.getData();
+
     if (currentData.length > 0) {
       currentData[0] = fieldNames;
     } else {
       currentData.push(fieldNames);
     }
 
-    // Ensure there are at least two rows
     if (currentData.length < 2) {
       currentData.push(Array(fieldNames.length).fill(null));
     }
 
-    // Update the dataTable instance with the new data
-    dataTable.loadData(currentData);
-  }
-  parent.handleAddFieldNames = handleAddFieldNames;
-
-  function handleClearAll() {
-    // Clear the table name input
-    document.getElementById("tableNameInput").value = "";
-
-    // Reset the spreadsheet
-    if (schemaTable) {
-      schemaTable.updateSettings({
-        data: [["", "", "", ""]],
-        colHeaders: ["Field Name", "Data Type", "Nullable/PK", "Default", "Field Order", "Comments"],
-      });
-    }
-
-    if (dataTable) {
-      dataTable.updateSettings({
-        data: [[], []],
-        colHeaders: true,
-        minCols: 1,
-      });
-    }
-
-    // Clear the query editor
-    if (editor) {
-      editor.setValue("");
-    }
-
-    // Clear error messages
-    clearError();
-
-    // Reset query type select
-    document.getElementById("queryTypeSelect").value = "merge";
+    this.dataTable.loadData(currentData);
   }
 
-  async function handleGenerateQuery() {
-    try {
-      // Get input data
-      const tableName = document.getElementById("tableNameInput").value.trim();
-      const queryType = document.getElementById("queryTypeSelect").value;
+  handleAddDataRow() {
+    const currentData = this.dataTable.getData();
+    const schemaData = this.schemaTable.getData().filter((row) => row[0]);
+    const columnCount = schemaData.length;
+    const newRow = Array(columnCount).fill(null);
+    const newData = [...currentData, newRow];
+    this.dataTable.loadData(newData);
+  }
 
-      // Get schema data (removing empty rows)
-      const schemaData = schemaTable.getData().filter((row) => row[0]);
+  handleRemoveDataRow() {
+    const currentData = this.dataTable.getData();
+    const newData = currentData.slice(0, -1);
+    this.dataTable.loadData(newData);
+  }
 
-      // Get input data (all rows including headers)
-      const inputData = dataTable.getData();
+  handleAddNewSchemaRow() {
+    const currentData = this.schemaTable.getData();
+    const newRow = Array(6).fill(null);
+    const newData = [...currentData, newRow];
+    this.schemaTable.loadData(newData);
+  }
 
-      // Handle empty table name
-      if (!tableName) {
-        throw new Error("Please fill in schema_name.table_name.");
-      }
+  handleRemoveLastSchemaRow() {
+    const currentData = this.schemaTable.getData();
+    const newData = currentData.slice(0, -1);
+    this.schemaTable.loadData(newData);
+  }
 
-      // Table name format warning (not blocking)
-      if (!tableName.includes(".")) {
-        throw new Error("Table name format should be 'schema_name.table_name'.");
-      }
-
-      // Handle DBeaver schema format
-      if (isDbeaverSchema(schemaData)) {
-        adjustDbeaverSchema(schemaData);
-        throw new Error("Schema data adjusted from DBeaver to SQL Developer format. Please refill the data sheet.");
-      }
-
-      schemaValidationService.validateSchema(schemaData);
-      schemaValidationService.matchSchemaWithData(schemaData, inputData);
-
-      // Save schema to local storage
-      schemaStorageService.saveSchema(tableName, schemaData);
-
-      // Generate the query
-      const query = queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData);
-
-      // Update editor with generated query
-      editor.setValue(query);
-      clearError();
-    } catch (error) {
-      showError(error.message);
-      editor.setValue("");
+  handleClearAllSchemas() {
+    const schemaCleared = this.schemaStorageService.clearAllSchemas();
+    if (schemaCleared) {
+      this.showSuccess("All saved schemas have been cleared");
+    } else {
+      this.showError("Failed to clear all saved schemas");
     }
   }
 
-  // Non Event Handlers but Impacting UI
-  function showError(message) {
-    const errorMessagesDiv = document.getElementById("errorMessages");
-    errorMessagesDiv.innerHTML = message;
-    errorMessagesDiv.style.display = "block";
-  }
-
-  function showWarning(message) {
-    const warningMessagesDiv = document.getElementById("warningMessages");
-    warningMessagesDiv.innerHTML = message;
-    warningMessagesDiv.style.display = "block";
-    warningMessagesDiv.style.color = "orange";
-  }
-
-  function clearError() {
-    const errorMessagesDiv = document.getElementById("errorMessages");
-    const warningMessagesDiv = document.getElementById("warningMessages");
-    errorMessagesDiv.textContent = "";
-    warningMessagesDiv.textContent = "";
-    errorMessagesDiv.style.display = "none";
-    warningMessagesDiv.style.display = "none";
-  }
-  parent.clearError = clearError;
-
-  // Schema Management Functions
-  function createSchemaOverlay() {
-    // Get elements
-    const overlay = document.getElementById("schemaOverlay");
-    const closeButton = document.getElementById("closeSchemaOverlay");
-    const showButton = document.getElementById("showSavedSchemas");
-    const exportButton = document.getElementById("exportSchemas");
-    const clearAllButton = document.getElementById("clearAllSchemas");
-
-    // Show overlay
-    showButton.addEventListener("click", () => {
-      overlay.classList.remove("hidden");
-      updateSavedSchemasList();
-    });
-
-    // Close overlay
-    closeButton.addEventListener("click", () => {
-      overlay.classList.add("hidden");
-    });
-
-    // Close on click outside modal
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) {
-        overlay.classList.add("hidden");
-      }
-    });
-
-    // Export button
-    exportButton.addEventListener("click", () => {
-      const allTables = schemaStorageService.getAllTables();
-      if (allTables.length === 0) {
-        showError("No schemas to export");
-        return;
-      }
-      exportSchemas();
-    });
-
-    // Clear All button
-    clearAllButton.addEventListener("click", () => {
-      const allTables = schemaStorageService.getAllTables();
-      if (allTables.length === 0) {
-        showError("No schemas to clear");
-        return;
-      }
-
-      if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
-        handleClearAllSchemas();
-      }
-    });
-
-    // Set up import functionality
-    setupSchemaImport();
-  }
-
-  function updateSavedSchemasList() {
-    const schemasList = document.getElementById("savedSchemasList");
-    const allTables = schemaStorageService.getAllTables();
+  // Schema management methods
+  updateSavedSchemasList() {
+    const allTables = this.schemaStorageService.getAllTables();
 
     if (allTables.length === 0) {
-      schemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
+      this.elements.savedSchemasList.innerHTML = '<div class="no-schemas">No saved schemas</div>';
       return;
     }
 
-    // Group by schema
     const groupedTables = allTables.reduce((groups, table) => {
       if (!groups[table.schemaName]) {
         groups[table.schemaName] = [];
@@ -694,10 +489,8 @@ export function initQuickQuery(container, updateHeaderTitle) {
       return groups;
     }, {});
 
-    // Clear existing content
-    schemasList.innerHTML = "";
+    this.elements.savedSchemasList.innerHTML = "";
 
-    // Create and append elements
     Object.entries(groupedTables).forEach(([schemaName, tables]) => {
       const groupDiv = document.createElement("div");
       groupDiv.className = "schema-group";
@@ -728,15 +521,13 @@ export function initQuickQuery(container, updateHeaderTitle) {
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "schema-actions";
 
-        // Load button
         const loadBtn = document.createElement("button");
         loadBtn.textContent = "Load";
-        loadBtn.addEventListener("click", () => handleLoadSchema(table.fullName));
+        loadBtn.addEventListener("click", () => this.handleLoadSchema(table.fullName));
 
-        // Delete button
         const deleteBtn = document.createElement("button");
         deleteBtn.textContent = "Delete";
-        deleteBtn.addEventListener("click", () => handleDeleteSchema(table.fullName));
+        deleteBtn.addEventListener("click", () => this.handleDeleteSchema(table.fullName));
 
         actionsDiv.appendChild(loadBtn);
         actionsDiv.appendChild(deleteBtn);
@@ -746,64 +537,160 @@ export function initQuickQuery(container, updateHeaderTitle) {
         groupDiv.appendChild(itemDiv);
       });
 
-      schemasList.appendChild(groupDiv);
+      this.elements.savedSchemasList.appendChild(groupDiv);
     });
   }
 
-  function handleLoadSchema(fullName) {
-    const schema = schemaStorageService.loadSchema(fullName);
+  handleLoadSchema(fullName) {
+    const schema = this.schemaStorageService.loadSchema(fullName);
     if (schema) {
-      document.getElementById("tableNameInput").value = fullName;
-      schemaTable.loadData(schema);
-      // dataTable.loadData([[], []]);
-      updateDataSpreadsheet();
-      handleAddFieldNames();
-
-      // Close the overlay after loading
-      document.getElementById("schemaOverlay").classList.add("hidden");
-
-      // Clear any existing error messages
-      clearError();
+      this.elements.tableNameInput.value = fullName;
+      this.schemaTable.loadData(schema);
+      this.updateDataSpreadsheet();
+      this.handleAddFieldNames();
+      this.elements.schemaOverlay.classList.add("hidden");
+      this.clearError();
     } else {
-      showError(`Failed to load schema for ${fullName}`);
+      this.showError(`Failed to load schema for ${fullName}`);
     }
   }
 
-  function handleDeleteSchema(fullName) {
+  handleDeleteSchema(fullName) {
     if (confirm(`Delete schema for ${fullName}?`)) {
-      const deleted = schemaStorageService.deleteSchema(fullName);
+      const deleted = this.schemaStorageService.deleteSchema(fullName);
       if (deleted) {
-        updateSavedSchemasList();
+        this.updateSavedSchemasList();
 
-        // If the deleted schema was the current one, clear the input
-        const currentTable = document.getElementById("tableNameInput").value;
+        const currentTable = this.elements.tableNameInput.value;
         if (currentTable === fullName) {
-          handleClearAll();
+          this.handleClearAll();
         }
       } else {
-        showError(`Failed to delete schema for ${fullName}`);
+        this.showError(`Failed to delete schema for ${fullName}`);
       }
     }
   }
 
-  function handleClearAllSchemas() {
-    const schemaCleared = schemaStorageService.clearAllSchemas();
-    if (schemaCleared) {
-      showSuccess("All saved schemas have been cleared");
-    } else {
-      showError("Failed to clear all saved schemas");
+  exportSchemas() {
+    const allTables = this.schemaStorageService.getAllTables();
+    const exportData = {};
+
+    allTables.forEach((table) => {
+      const schema = this.schemaStorageService.loadSchema(table.fullName);
+      if (schema) {
+        if (!exportData[table.schemaName]) {
+          exportData[table.schemaName] = {};
+        }
+        exportData[table.schemaName][table.tableName] = schema;
+      }
+    });
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "quick_query_saved_schemas.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  setupTableNameSearch() {
+    const tableNameInput = this.elements.tableNameInput;
+
+    // Disable browser's default suggestions
+    tableNameInput.setAttribute("autocomplete", "off");
+    tableNameInput.setAttribute("autocorrect", "off");
+    tableNameInput.setAttribute("autocapitalize", "off");
+    tableNameInput.setAttribute("spellcheck", "false");
+
+    // Create a container div and wrap it around the input
+    const container = document.createElement("div");
+    container.className = "table-search-container";
+    tableNameInput.parentNode.insertBefore(container, tableNameInput);
+    container.appendChild(tableNameInput);
+
+    // Create dropdown container
+    const dropdownContainer = document.createElement("div");
+    dropdownContainer.className = "table-search-dropdown";
+    dropdownContainer.style.display = "none";
+    container.appendChild(dropdownContainer);
+
+    // Store containers in elements
+    this.elements.tableSearchContainer = container;
+    this.elements.dropdownContainer = dropdownContainer;
+
+    this.setupSearchEventListeners(container, dropdownContainer, tableNameInput);
+  }
+
+  setupSearchEventListeners(container, dropdownContainer, tableNameInput) {
+    // Event Listeners
+    tableNameInput.addEventListener("input", (e) => this.handleSearchInput(e));
+    tableNameInput.addEventListener("keydown", (e) => this.handleSearchKeyDown(e));
+
+    // Close dropdown when clicking outside
+    document.addEventListener("click", (event) => {
+      if (!container.contains(event.target)) {
+        dropdownContainer.style.display = "none";
+        this.searchState.selectedIndex = -1;
+      }
+    });
+  }
+
+  handleSearchInput(event) {
+    const input = event.target.value.trim();
+    this.elements.tableNameInput.style.borderColor = "";
+
+    if (!input) {
+      const results = this.schemaStorageService.searchSavedSchemas("").slice(0, 7);
+      this.showSearchDropdown(results);
+      return;
+    }
+
+    const parts = input.split(".");
+    if (!this.validateSearchInput(parts)) {
+      return;
+    }
+
+    const results = this.schemaStorageService.searchSavedSchemas(input);
+    this.showSearchDropdown(results);
+  }
+
+  handleSearchKeyDown(event) {
+    if (this.elements.dropdownContainer.style.display === "none" && event.key === "ArrowDown") {
+      const results = this.schemaStorageService.searchSavedSchemas("").slice(0, 7);
+      this.showSearchDropdown(results);
+      this.searchState.selectedIndex = -1;
+      return;
+    }
+
+    if (this.elements.dropdownContainer.style.display === "block") {
+      this.handleDropdownNavigation(event);
     }
   }
 
-  function setupSchemaImport() {
-    const importButton = document.getElementById("importSchemas");
-    const fileInput = document.getElementById("schemaFileInput");
+  loadMostRecentSchema() {
+    const allTables = this.schemaStorageService.getAllTables();
+    if (allTables.length > 0) {
+      const mostRecent = allTables[0];
+      const schema = this.schemaStorageService.loadSchema(mostRecent.fullName);
+      if (schema) {
+        this.elements.tableNameInput.value = mostRecent.fullName;
+        this.schemaTable.loadData(schema);
+        this.updateDataSpreadsheet();
+      }
+    }
+  }
 
-    importButton.addEventListener("click", () => {
-      fileInput.click();
+  setupSchemaImport() {
+    this.elements.importSchemasButton.addEventListener("click", () => {
+      this.elements.schemaFileInput.click();
     });
 
-    fileInput.addEventListener("change", async (event) => {
+    this.elements.schemaFileInput.addEventListener("change", async (event) => {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -811,38 +698,33 @@ export function initQuickQuery(container, updateHeaderTitle) {
         const text = await file.text();
         const jsonData = JSON.parse(text);
 
-        // Validate schema format
-        if (!isValidSchemaFormat(jsonData)) {
+        if (!this.isValidSchemaFormat(jsonData)) {
           throw new Error("Invalid schema format");
         }
 
-        // Import schemas
         let importCount = 0;
 
-        // Process each schema and its tables
         Object.entries(jsonData).forEach(([schemaName, tables]) => {
           Object.entries(tables).forEach(([tableName, schema]) => {
             const fullTableName = `${schemaName}.${tableName}`;
-            if (schemaStorageService.saveSchema(fullTableName, schema)) {
+            if (this.schemaStorageService.saveSchema(fullTableName, schema)) {
               importCount++;
             }
           });
         });
 
-        // Update UI
-        updateSavedSchemasList();
-        showSuccess(`Successfully imported ${importCount} table schemas`);
-        // clear after 3 seconds
-        setTimeout(() => clearError(), 3000);
+        this.updateSavedSchemasList();
+        this.showSuccess(`Successfully imported ${importCount} table schemas`);
+        setTimeout(() => this.clearError(), 3000);
       } catch (error) {
-        showError(`Failed to import schemas: ${error.message}`);
+        this.showError(`Failed to import schemas: ${error.message}`);
       } finally {
-        fileInput.value = ""; // Reset file input
+        event.target.value = ""; // Reset file input
       }
     });
   }
 
-  function isValidSchemaFormat(data) {
+  isValidSchemaFormat(data) {
     if (!data || typeof data !== "object") return false;
 
     return Object.entries(data).every(([schemaName, tables]) => {
@@ -864,293 +746,49 @@ export function initQuickQuery(container, updateHeaderTitle) {
     });
   }
 
-  function exportSchemas() {
-    const allTables = schemaStorageService.getAllTables();
-    const exportData = {};
+  createSchemaOverlay() {
+    this.elements.showSavedSchemasButton.addEventListener("click", () => {
+      this.elements.schemaOverlay.classList.remove("hidden");
+      this.updateSavedSchemasList();
+    });
 
-    // Group by schema and table
-    allTables.forEach((table) => {
-      const schema = schemaStorageService.loadSchema(table.fullName);
-      if (schema) {
-        // Initialize schema if needed
-        if (!exportData[table.schemaName]) {
-          exportData[table.schemaName] = {};
-        }
+    this.elements.closeSchemaOverlayButton.addEventListener("click", () => {
+      this.elements.schemaOverlay.classList.add("hidden");
+    });
 
-        // Add table schema
-        exportData[table.schemaName][table.tableName] = schema;
+    this.elements.schemaOverlay.addEventListener("click", (e) => {
+      if (e.target === this.elements.schemaOverlay) {
+        this.elements.schemaOverlay.classList.add("hidden");
       }
     });
 
-    // Create and download file
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "quick_query_saved_schemas.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  // Quick Query Functions
-  function adjustDbeaverSchema(schemaData) {
-    console.log("Adjusting schema data");
-
-    // Remove the header row
-    const removedHeader = schemaData.slice(1);
-
-    // Transform the data
-    const adjustedSchemaData = removedHeader.map((row) => {
-      // Original DBeaver format:
-      // [0]: Column Name
-      // [1]: Column Type
-      // [2]: Type Name
-      // [3]: Column Size
-      // [4]: Nullable
-      // [5]: Default Value
-      // [6]: Comments
-
-      // Transform nullable from TRUE/FALSE to No/Yes
-      const nullable = String(row[4]).toLowerCase() === "true" ? "No" : "Yes";
-
-      // Transform [NULL] to empty string
-      const defaultValue = row[5] === "[NULL]" ? "" : row[5];
-
-      return [
-        row[0], // [0] Field Name (same as Column Name)
-        row[2], // [1] Data Type (use Type Name instead of Column Type)
-        nullable, // [2] Nullable/PK
-        defaultValue, // [3] Default Value
-        row[1] || "", // [4] Field Order (use Column Type as order)
-        row[6] || "", // [5] Comments
-      ];
-    });
-
-    // Update the schemaTable with the new data
-    if (schemaTable && typeof schemaTable.loadData === "function") {
-      try {
-        // Clear existing data and load new data
-        schemaTable.loadData(adjustedSchemaData);
-        updateDataSpreadsheet();
-      } catch (error) {
-        console.error("Error updating schema table:", error);
-      }
-    }
-  }
-
-  // Constants
-  const showErrorState = (errorMessage) => {
-    container.innerHTML = quickQueryErrorHtmlPage;
-    const errorDiv = container.querySelector(".error-message");
-    const retryButton = container.querySelector(".retry-button");
-
-    errorDiv.innerHTML = `<b>Failed to load Quick Query Resources:</b><br>${errorMessage}.<br>We use CDN links to load the required tools. Please check your network connection and try again.`;
-
-    // Add retry functionality
-    retryButton.addEventListener("click", async () => {
-      retryButton.disabled = true;
-      retryButton.textContent = "Retrying...";
-      try {
-        await initQuickQuery(container, updateHeaderTitle);
-      } catch (error) {
-        retryButton.disabled = false;
-        retryButton.textContent = "Retry Loading";
-      }
-    });
-  };
-
-  const EVENT_HANDLERS = {
-    // Button click handlers
-    generateQuery: {
-      event: "click",
-      handler: handleGenerateQuery,
-    },
-    copySQL: {
-      event: "click",
-      handler: (event) => copyToClipboard(editor.getValue(), event.target),
-    },
-    clearAll: {
-      event: "click",
-      handler: handleClearAll,
-    },
-    downloadSQL: {
-      event: "click",
-      handler: handleDownloadSql,
-    },
-    toggleGuide: {
-      event: "click",
-      handler: handleToggleGuide,
-    },
-    toggleWordWrap: {
-      event: "click",
-      handler: handleToggleWordWrap,
-    },
-
-    // Simulation handlers
-    simulationFillSchemaButton: {
-      event: "click",
-      handler: handleSimulationFillSchema,
-    },
-    simulationFillDataButton: {
-      event: "click",
-      handler: handleSimulationFillData,
-    },
-    simulationGenerateQueryButton: {
-      event: "click",
-      handler: handleSimulationGenerateQuery,
-    },
-
-    // Data manipulation handlers
-    addFieldNames: {
-      event: "click",
-      handler: handleAddFieldNames,
-    },
-    addDataRow: {
-      event: "click",
-      handler: handleAddDataRow,
-    },
-    removeDataRow: {
-      event: "click",
-      handler: handleRemoveDataRow,
-    },
-    addNewSchemaRow: {
-      event: "click",
-      handler: handleAddNewSchemaRow,
-    },
-    removeLastSchemaRow: {
-      event: "click",
-      handler: handleRemoveLastSchemaRow,
-    },
-
-    // Select handlers
-    queryTypeSelect: {
-      event: "change",
-      handler: handleGenerateQuery,
-    },
-  };
-
-  function setupEventListeners() {
-    Object.entries(EVENT_HANDLERS).forEach(([id, config]) => {
-      const element = document.getElementById(id);
-      if (!element) {
-        console.warn(`Element with id '${id}' not found`);
+    this.elements.exportSchemasButton.addEventListener("click", () => {
+      const allTables = this.schemaStorageService.getAllTables();
+      if (allTables.length === 0) {
+        this.showError("No schemas to export");
         return;
       }
+      this.exportSchemas();
+    });
 
-      // Handle cases where an element has multiple event handlers
-      if (Array.isArray(config)) {
-        config.forEach(({ event, handler }) => {
-          element.addEventListener(event, handler);
-        });
-      } else {
-        // Single event handler case
-        const { event, handler } = config;
-        element.addEventListener(event, handler);
+    this.elements.clearAllSchemasButton.addEventListener("click", () => {
+      const allTables = this.schemaStorageService.getAllTables();
+      if (allTables.length === 0) {
+        this.showError("No schemas to clear");
+        return;
+      }
+      if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
+        this.handleClearAllSchemas();
       }
     });
+
+    this.setupSchemaImport();
   }
+}
 
-  // Initiate page tools
-  let editor;
-  let schemaTable;
-  let dataTable;
-
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = src;
-      script.onload = () => resolve(true);
-      script.onerror = (error) => reject(new Error(`Failed to load script: ${src}`));
-      document.head.appendChild(script);
-    });
-  }
-
-  function loadStyle(href) {
-    return new Promise((resolve, reject) => {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = href;
-      link.onload = () => resolve(true);
-      link.onerror = (error) => reject(new Error(`Failed to load stylesheet: ${href}`));
-      document.head.appendChild(link);
-    });
-  }
-
-  async function loadHandsontable() {
-    return retryOperation(
-      async () => {
-        const [scriptLoaded, styleLoaded] = await Promise.all([
-          loadScript("https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"),
-          loadStyle("https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css"),
-        ]);
-        return { scriptLoaded, styleLoaded };
-      },
-      {
-        name: "Handsontable loading",
-        retries: 3,
-        delay: 1000,
-      }
-    );
-  }
-
-  // Start the initialization process
-  return new Promise((resolve, reject) => {
-    try {
-      // Set up initial HTML
-      container.innerHTML = quickQueryMainHtmlPage;
-      clearError();
-
-      // Single initialization flow with retry logic
-      retryOperation(
-        () =>
-          new Promise((resolveOp, rejectOp) => {
-            loadHandsontable()
-              .then(() => {
-                initializeSchemaTable();
-                initializeEditor();
-                setupEventListeners();
-                setupTableNameSearch(parent);
-
-                // Try to load most recent schema from local storage
-                const allTables = schemaStorageService.getAllTables();
-                if (allTables.length > 0) {
-                  const mostRecent = allTables[0];
-                  const schema = schemaStorageService.loadSchema(mostRecent.fullName);
-                  if (schema) {
-                    document.getElementById("tableNameInput").value = mostRecent.fullName;
-                    schemaTable.loadData(schema);
-                    updateDataSpreadsheet();
-                  }
-                }
-                createSchemaOverlay();
-
-                resolveOp();
-              })
-              .catch(rejectOp);
-          }),
-        {
-          name: "Quick Query initialization",
-          retries: 3,
-          delay: 1000,
-          onFailedAttempt: (error, attempt, maxRetries) => {
-            console.warn(`Initialization attempt ${attempt}/${maxRetries} failed:`, error);
-            showError(`Loading tools required... (Attempt ${attempt}/${maxRetries})`);
-          },
-        }
-      )
-        .then(resolve)
-        .catch((error) => {
-          console.error("Failed to initialize Quick Query:", error);
-          showErrorState(error.message || "Unknown error occurred");
-          reject(error);
-        });
-    } catch (error) {
-      showErrorState(error.message || "Unknown error occurred");
-      reject(error);
-    }
-  });
+// Export the main initialization function
+export async function initQuickQuery(container) {
+  const quickQueryUI = new QuickQueryUI(container);
+  await quickQueryUI.init();
+  return quickQueryUI;
 }
