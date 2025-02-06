@@ -6,6 +6,7 @@ import { SchemaValidationService, isDbeaverSchema } from "./services/SchemaValid
 import { DependencyLoader } from "../../utils/dependencyLoader.js";
 import { sampleSchema1, sampleData1 } from "./constants/Constants.js";
 import { initialSchemaTableSpecification, initialDataTableSpecification } from "./constants/Constants.js";
+import { AttachmentProcessorService } from "./services/AttachmentProcessorService.js";
 
 export class QuickQueryUI {
   constructor(container, updateHeaderTitle) {
@@ -18,7 +19,9 @@ export class QuickQueryUI {
     this.localStorageService = new LocalStorageService();
     this.schemaValidationService = new SchemaValidationService();
     this.queryGenerationService = new QueryGenerationService();
-    this.isGuideActive = true;
+    this.attachmentProcessorService = new AttachmentProcessorService();
+    this.isGuideActive = false;
+    this.isAttachmentActive = false;
 
     // Initialize search state
     this.searchState = {
@@ -41,7 +44,6 @@ export class QuickQueryUI {
       this.setupEventListeners();
       this.setupTableNameSearch();
       this.loadMostRecentSchema();
-      this.setupSchemaImport();
     } catch (error) {
       console.error("Failed to initialize Quick Query:", error);
       if (this.elements.errorMessages) {
@@ -56,41 +58,10 @@ export class QuickQueryUI {
 
   async initializeComponents() {
     try {
-      const schemaTableConfig = {
-        ...initialSchemaTableSpecification,
-        afterChange: (changes) => {
-          if (changes) {
-            this.updateDataSpreadsheet();
-            this.handleAddFieldNames();
-          }
-        },
-        afterGetColHeader: function (col, TH) {
-          const header = TH.querySelector(".colHeader");
-          if (header) {
-            header.style.fontWeight = "bold";
-          }
-        },
-      };
-      this.schemaTable = new Handsontable(this.elements.schemaContainer, schemaTableConfig);
-
-      const dataTableConfig = {
-        ...initialDataTableSpecification,
-        afterChange: (changes, source) => {
-          if (!changes || source === "loadData") return; // Skip if no changes or if change is from loading data
-
-          const tableName = this.elements.tableNameInput.value.trim();
-          if (!tableName) return; // Skip if no table name
-
-          // Only save if there are actual changes
-          if (changes.length > 0) {
-            const currentData = this.dataTable.getData();
-            this.localStorageService.updateTableData(tableName, currentData);
-          }
-        },
-      };
-
-      this.dataTable = new Handsontable(this.elements.dataContainer, dataTableConfig);
+      this.initializeSpreadsheets();
       this.initializeEditor();
+      this.elements.filesContainer.classList.add("hidden");
+      this.elements.attachmentsContainer.classList.remove("hidden");
     } catch (error) {
       throw new Error(`Failed to initialize components: ${error.message}`);
     }
@@ -106,6 +77,11 @@ export class QuickQueryUI {
       // Schema editor elements
       schemaContainer: document.getElementById("spreadsheet-schema"),
       dataContainer: document.getElementById("spreadsheet-data"),
+
+      // Attachments components
+      attachmentsContainer: document.getElementById("attachments-container"),
+      attachmentsInput: document.getElementById("attachmentsInput"),
+      filesContainer: document.getElementById("files-container"),
 
       // Message and display elements
       errorMessages: document.getElementById("errorMessages"),
@@ -133,134 +109,110 @@ export class QuickQueryUI {
   }
 
   setupEventListeners() {
-    const EVENT_HANDLERS = {
-      // Query generation and manipulation
+    const eventMap = {
+      // Input elements
+      tableNameInput: {
+        input: (e) => this.handleSearchInput(e),
+        keydown: (e) => this.handleSearchKeyDown(e),
+      },
+      queryTypeSelect: {
+        change: () => this.handleGenerateQuery(),
+      },
+      schemaFileInput: {
+        change: (e) => this.handleSchemaFileInput(e),
+      },
+      // Query related buttons
       generateQuery: {
-        event: "click",
-        handler: () => this.handleGenerateQuery(),
+        click: () => this.handleGenerateQuery(),
       },
       copySQL: {
-        event: "click",
-        handler: (event) => copyToClipboard(this.editor.getValue(), event.target),
+        click: (e) => copyToClipboard(this.editor.getValue(), e.target),
       },
       clearAll: {
-        event: "click",
-        handler: () => this.handleClearAll(),
+        click: () => this.handleClearAll(),
       },
       downloadSQL: {
-        event: "click",
-        handler: () => this.handleDownloadSql(),
+        click: () => this.handleDownloadSql(),
       },
-      toggleWordWrap: {
-        event: "click",
-        handler: () => this.handleToggleWordWrap(),
+      toggleWordWrapButton: {
+        click: () => this.handleToggleWordWrap(),
       },
 
-      // Guide and simulation handlers
-      toggleGuide: {
-        event: "click",
-        handler: () => this.handleToggleGuide(),
+      // Attachments related
+      attachmentsContainer: {
+        click: () => this.elements.attachmentsInput.click(),
+        dragOver: (e) => this.handleDragOver(e),
+        dragLeave: (e) => this.handleDragLeave(e),
+        drop: (e) => this.handleDrop(e),
+      },
+      attachmentsInput: {
+        change: (e) => this.handleAttachmentsInput(e),
+      },
+
+      // Guide related buttons
+      toggleGuideButton: {
+        click: () => this.handleToggleGuide(),
       },
       simulationFillSchemaButton: {
-        event: "click",
-        handler: () => this.handleSimulationFillSchema(),
+        click: () => this.handleSimulationFillSchema(),
       },
       simulationFillDataButton: {
-        event: "click",
-        handler: () => this.handleSimulationFillData(),
+        click: () => this.handleSimulationFillData(),
       },
       simulationGenerateQueryButton: {
-        event: "click",
-        handler: () => this.handleSimulationGenerateQuery(),
+        click: () => this.handleSimulationGenerateQuery(),
       },
 
-      // Data manipulation handlers
+      // Data related buttons
       addFieldNames: {
-        event: "click",
-        handler: () => this.handleAddFieldNames(),
+        click: () => this.handleAddFieldNames(),
       },
       addDataRow: {
-        event: "click",
-        handler: () => this.handleAddDataRow(),
+        click: () => this.handleAddDataRow(),
       },
       removeDataRow: {
-        event: "click",
-        handler: () => this.handleRemoveDataRow(),
-      },
-      addNewSchemaRow: {
-        event: "click",
-        handler: () => this.handleAddNewSchemaRow(),
-      },
-      removeLastSchemaRow: {
-        event: "click",
-        handler: () => this.handleRemoveLastSchemaRow(),
+        click: () => this.handleRemoveDataRow(),
       },
       clearData: {
-        event: "click",
-        handler: () => this.handleClearData(),
+        click: () => this.handleClearData(),
       },
 
-      // Schema overlay handlers
-      showSavedSchemas: {
-        event: "click",
-        handler: () => {
+      // Schema related buttons
+      addNewSchemaRow: {
+        click: () => this.handleAddNewSchemaRow(),
+      },
+      removeLastSchemaRow: {
+        click: () => this.handleRemoveLastSchemaRow(),
+      },
+      showSavedSchemasButton: {
+        click: () => {
           this.elements.schemaOverlay.classList.remove("hidden");
           this.updateSavedSchemasList();
         },
       },
-      closeSchemaOverlay: {
-        event: "click",
-        handler: () => {
-          this.elements.schemaOverlay.classList.add("hidden");
-        },
+      closeSchemaOverlayButton: {
+        click: () => this.elements.schemaOverlay.classList.add("hidden"),
       },
-      exportSchemas: {
-        event: "click",
-        handler: () => {
-          const allTables = this.localStorageService.getAllTables();
-          if (allTables.length === 0) {
-            this.showError("No schemas to export");
-            return;
-          }
-          this.exportSchemas();
-        },
+      exportSchemasButton: {
+        click: () => this.handleExportSchemas(),
       },
-      clearAllSchemas: {
-        event: "click",
-        handler: () => {
-          const allTables = this.localStorageService.getAllTables();
-          if (allTables.length === 0) {
-            this.showError("No schemas to clear");
-            return;
-          }
-          if (confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
-            this.handleClearAllSchemas();
-            this.elements.schemaOverlay.classList.add("hidden");
-          }
-        },
+      clearAllSchemasButton: {
+        click: () => this.handleClearAllSchemas(),
       },
-
-      // Query type selection
-      queryTypeSelect: {
-        event: "change",
-        handler: () => this.handleGenerateQuery(),
+      importSchemasButton: {
+        click: () => this.elements.schemaFileInput.click(),
       },
     };
 
-    Object.entries(EVENT_HANDLERS).forEach(([id, config]) => {
-      const element = document.getElementById(id);
-      if (!element) {
-        console.warn(`Element with id '${id}' not found`);
-        return;
-      }
-
-      if (Array.isArray(config)) {
-        config.forEach(({ event, handler }) => {
+    // Bind all event handlers
+    Object.entries(eventMap).forEach(([elementId, events]) => {
+      const element = this.elements[elementId] || document.getElementById(elementId);
+      if (element) {
+        Object.entries(events).forEach(([event, handler]) => {
           element.addEventListener(event, handler);
         });
       } else {
-        const { event, handler } = config;
-        element.addEventListener(event, handler);
+        console.warn(`Element '${elementId}' not found`);
       }
     });
   }
@@ -276,6 +228,43 @@ export class QuickQueryUI {
     });
 
     setTimeout(() => this.editor.refresh(), 0);
+  }
+
+  initializeSpreadsheets() {
+    const schemaTableConfig = {
+      ...initialSchemaTableSpecification,
+      afterChange: (changes) => {
+        if (changes) {
+          this.updateDataSpreadsheet();
+          this.handleAddFieldNames();
+        }
+      },
+      afterGetColHeader: function (col, TH) {
+        const header = TH.querySelector(".colHeader");
+        if (header) {
+          header.style.fontWeight = "bold";
+        }
+      },
+    };
+    this.schemaTable = new Handsontable(this.elements.schemaContainer, schemaTableConfig);
+
+    const dataTableConfig = {
+      ...initialDataTableSpecification,
+      afterChange: (changes, source) => {
+        if (!changes || source === "loadData") return; // Skip if no changes or if change is from loading data
+
+        const tableName = this.elements.tableNameInput.value.trim();
+        if (!tableName) return; // Skip if no table name
+
+        // Only save if there are actual changes
+        if (changes.length > 0) {
+          const currentData = this.dataTable.getData();
+          this.localStorageService.updateTableData(tableName, currentData);
+        }
+      },
+    };
+
+    this.dataTable = new Handsontable(this.elements.dataContainer, dataTableConfig);
   }
 
   updateDataSpreadsheet() {
@@ -502,9 +491,20 @@ export class QuickQueryUI {
   }
 
   handleClearAllSchemas() {
+    const allTables = this.localStorageService.getAllTables();
+    if (allTables.length === 0) {
+      this.showError("No schemas to clear");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to clear all saved schemas? This cannot be undone.")) {
+      return;
+    }
+
     const schemaCleared = this.localStorageService.clearAllSchemas();
     if (schemaCleared) {
       this.showSuccess("All saved schemas have been cleared");
+      this.elements.schemaOverlay.classList.add("hidden");
     } else {
       this.showError("Failed to clear all saved schemas");
     }
@@ -617,10 +617,14 @@ export class QuickQueryUI {
     }
   }
 
-  exportSchemas() {
+  handleExportSchemas() {
     const allTables = this.localStorageService.getAllTables();
-    const exportData = {};
+    if (allTables.length === 0) {
+      this.showError("No schemas to export");
+      return;
+    }
 
+    const exportData = {};
     allTables.forEach((table) => {
       const schema = this.localStorageService.loadSchema(table.fullName);
       if (schema) {
@@ -828,43 +832,36 @@ export class QuickQueryUI {
     }
   }
 
-  setupSchemaImport() {
-    this.elements.importSchemasButton.addEventListener("click", () => {
-      this.elements.schemaFileInput.click();
-    });
+  async handleSchemaFileInput(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-    this.elements.schemaFileInput.addEventListener("change", async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
+    try {
+      const text = await file.text();
+      const jsonData = JSON.parse(text);
 
-      try {
-        const text = await file.text();
-        const jsonData = JSON.parse(text);
-
-        if (!this.isValidSchemaFormat(jsonData)) {
-          throw new Error("Invalid schema format");
-        }
-
-        let importCount = 0;
-
-        Object.entries(jsonData).forEach(([schemaName, tables]) => {
-          Object.entries(tables).forEach(([tableName, schema]) => {
-            const fullTableName = `${schemaName}.${tableName}`;
-            if (this.localStorageService.saveSchema(fullTableName, schema)) {
-              importCount++;
-            }
-          });
-        });
-
-        this.updateSavedSchemasList();
-        this.showSuccess(`Successfully imported ${importCount} table schemas`);
-        setTimeout(() => this.clearError(), 3000);
-      } catch (error) {
-        this.showError(`Failed to import schemas: ${error.message}`);
-      } finally {
-        event.target.value = ""; // Reset file input
+      if (!this.isValidSchemaFormat(jsonData)) {
+        throw new Error("Invalid schema format");
       }
-    });
+
+      let importCount = 0;
+      Object.entries(jsonData).forEach(([schemaName, tables]) => {
+        Object.entries(tables).forEach(([tableName, schema]) => {
+          const fullTableName = `${schemaName}.${tableName}`;
+          if (this.localStorageService.saveSchema(fullTableName, schema)) {
+            importCount++;
+          }
+        });
+      });
+
+      this.updateSavedSchemasList();
+      this.showSuccess(`Successfully imported ${importCount} table schemas`);
+      setTimeout(() => this.clearError(), 3000);
+    } catch (error) {
+      this.showError(`Failed to import schemas: ${error.message}`);
+    } finally {
+      event.target.value = ""; // Reset file input
+    }
   }
 
   isValidSchemaFormat(data) {
@@ -932,6 +929,78 @@ export class QuickQueryUI {
         console.error("Error updating schema table:", error);
       }
     }
+  }
+
+  async handleAttachmentsInput(e) {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      try {
+        const processedFiles = await this.attachmentProcessorService.processAttachments(files);
+        console.log("Processed files:", processedFiles);
+
+        // Clear existing file buttons
+        this.elements.filesContainer.innerHTML = "";
+
+        // Create file buttons for each processed file
+        processedFiles.forEach((file, index) => {
+          const fileButton = document.createElement("button");
+          fileButton.className = "file-button";
+          fileButton.innerHTML = `
+            <span class="file-name">${file.name}</span>
+            <div class="file-actions">
+              <span class="file-size">${(file.size / 1024).toFixed(2)} KB</span>
+              <button class="delete-file" title="Delete file">×</button>
+            </div>
+          `;
+
+          // Add click handler for the delete button
+          const deleteBtn = fileButton.querySelector(".delete-file");
+          deleteBtn.addEventListener("click", (e) => {
+            e.stopPropagation(); // Prevent file button click
+            processedFiles.splice(index, 1);
+            fileButton.remove();
+
+            // If no files left, show the upload container again
+            if (processedFiles.length === 0) {
+              this.elements.filesContainer.classList.add("hidden");
+              this.elements.attachmentsContainer.classList.remove("hidden");
+            }
+          });
+
+          fileButton.addEventListener("click", () => {
+            console.log("File details:", file);
+          });
+
+          this.elements.filesContainer.appendChild(fileButton);
+        });
+
+        // Hide attachments container and show files container
+        this.elements.attachmentsContainer.classList.add("hidden");
+        this.elements.filesContainer.classList.remove("hidden");
+
+        this.clearError();
+      } catch (error) {
+        this.showError(`Error processing attachments: ${error.message}`);
+      }
+    }
+  }
+
+  handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.attachmentsContainer.classList.add("drag-over");
+  }
+
+  handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.attachmentsContainer.classList.remove("drag-over");
+  }
+
+  handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.attachmentsContainer.classList.remove("drag-over");
   }
 }
 
