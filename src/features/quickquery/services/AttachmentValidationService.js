@@ -51,6 +51,11 @@ export class AttachmentValidationService {
   }
 
   handleBlobType(file) {
-    return Array.from(file.processedFormats.binary);
+    const binary = file.processedFormats.binary;
+    if (binary.length > 4000) {
+      // If binary is too large, return the filename instead
+      return file.name;
+    }
+    return Array.from(binary);
   }
 }

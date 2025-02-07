@@ -581,10 +581,10 @@
 
 /* Container styling */
 #files-container {
-  padding: 15px;
+  padding: 15px 0 15px 0;
   border-radius: 6px;
   background-color: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); */
 }
 
 #files-container.hidden {

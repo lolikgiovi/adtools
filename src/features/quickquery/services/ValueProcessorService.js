@@ -2,6 +2,17 @@ export class ValueProcessorService {
   constructor() {}
 
   processValue(value, dataType, nullable, fieldName, tableName) {
+    console.log("Processing value:", value);
+
+    // Early check for BLOB type
+    if (dataType.toUpperCase() === "BLOB") {
+      if (Array.isArray(value)) {
+        return this.formatBLOB(value);
+      }
+      // If not binary array, treat as string
+      return `UTL_RAW.CAST_TO_RAW('${value}')`;
+    }
+
     // Constants
     const AUDIT_FIELDS = {
       time: ["created_time", "updated_time"],
@@ -324,7 +335,14 @@ export class ValueProcessorService {
   }
 
   formatBLOB(value) {
-    // Assuming value is a base64 encoded string
+    if (Array.isArray(value)) {
+      // Convert binary array to hex string
+      const hexString = Array.from(value)
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      return `HEXTORAW('${hexString}')`;
+    }
+    // Fallback for non-binary values
     return `UTL_RAW.CAST_TO_RAW('${value}')`;
   }
 
