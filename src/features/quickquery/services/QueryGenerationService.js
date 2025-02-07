@@ -1,12 +1,14 @@
 import { ValueProcessorService } from "./ValueProcessorService.js";
 import { oracleReservedWords } from "../constants/Constants.js";
+import { AttachmentValidationService } from "./AttachmentValidationService.js";
 
 export class QueryGenerationService {
   constructor() {
     this.ValueProcessorService = new ValueProcessorService();
+    this.attachmentValidationService = new AttachmentValidationService();
   }
 
-  generateQuery(tableName, queryType, schemaData, inputData) {
+  generateQuery(tableName, queryType, schemaData, inputData, attachments) {
     // 1. Get field names from first row of input data
     const fieldNames = inputData[0].map((name) => name.toLowerCase());
     console.log("Field names extracted");
@@ -29,7 +31,18 @@ export class QueryGenerationService {
           // Extract dataType and nullable from schema
           const [, dataType, nullable] = schemaRow;
           // Get the actual value from the data
-          const value = rowData[colIndex];
+          let value = rowData[colIndex];
+
+          // Check if value matches any attachment
+          const attachmentValue = this.attachmentValidationService.validateAttachment(
+            value,
+            dataType,
+            this.getMaxLength(dataType),
+            attachments
+          );
+
+          // Use attachment value if found, otherwise use original value
+          value = attachmentValue !== null ? attachmentValue : value;
 
           // Return formatted object
           return {
@@ -150,5 +163,10 @@ export class QueryGenerationService {
 
   formatFieldName(fieldName) {
     return oracleReservedWords.has(fieldName.toLowerCase()) ? `"${fieldName.toUpperCase()}"` : fieldName;
+  }
+
+  getMaxLength(dataType) {
+    const match = dataType.match(/\((\d+)(?:\s*\w+)?\)/);
+    return match ? parseInt(match[1]) : null;
   }
 }

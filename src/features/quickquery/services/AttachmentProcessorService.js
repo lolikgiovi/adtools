@@ -16,15 +16,21 @@ export class AttachmentProcessorService {
 
     for (const file of files) {
       console.log("Processing file:", file.name);
-      const extension = file.name.split(".").pop().toLowerCase();
+      const sanitizedFileName = file.name.replace(/\s+/g, "_");
+      const extension = sanitizedFileName.split(".").pop().toLowerCase();
       const processedFile = {
-        name: file.name,
+        name: sanitizedFileName,
         type: file.type,
         size: file.size,
         processedFormats: {
           original: null,
           base64: null,
           binary: null,
+          sizes: {
+            original: 0,
+            base64: 0,
+            binary: 0,
+          },
         },
       };
 
@@ -57,15 +63,47 @@ export class AttachmentProcessorService {
     // Read as binary
     const binaryData = await this.readFileAs(file, "arrayBuffer");
     processedFile.processedFormats.binary = new Uint8Array(binaryData);
+    processedFile.processedFormats.sizes.binary = binaryData.byteLength;
 
     // Read as base64
     const base64Data = await this.readFileAs(file, "dataURL");
     processedFile.processedFormats.base64 = base64Data;
+    processedFile.processedFormats.sizes.base64 = base64Data.length;
   }
 
   async handleTextFile(file, processedFile) {
     const textContent = await this.readFileAs(file, "text");
     processedFile.processedFormats.original = textContent;
+    processedFile.processedFormats.contentType = "text/plain";
+
+    const binaryData = await this.readFileAs(file, "arrayBuffer");
+    processedFile.processedFormats.binary = new Uint8Array(binaryData);
+    processedFile.processedFormats.sizes.binary = binaryData.byteLength;
+
+    const cleaned = textContent.trim();
+    if (!cleaned) {
+      processedFile.processedFormats.sizes.original = 0;
+      return;
+    }
+
+    // Check for data URI base64 pattern
+    if (cleaned.match(/^data:.*?;base64,/)) {
+      processedFile.type = "text/base64";
+      processedFile.processedFormats.contentType = "text/base64";
+      processedFile.processedFormats.base64 = cleaned;
+
+      // Extract and decode base64 content
+      const base64Content = cleaned.split(",")[1];
+      try {
+        const decoded = atob(base64Content);
+        processedFile.processedFormats.sizes.original = decoded.length;
+        processedFile.processedFormats.sizes.base64 = cleaned.length;
+      } catch (e) {
+        processedFile.processedFormats.sizes.original = new TextEncoder().encode(textContent).length;
+      }
+    } else {
+      processedFile.processedFormats.sizes.original = new TextEncoder().encode(textContent).length;
+    }
   }
 
   readFileAs(file, readAs) {

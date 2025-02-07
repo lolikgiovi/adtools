@@ -75,3 +75,30 @@
         </div>
     </div>
 </div>
+
+<div id="fileViewerOverlay" class="file-viewer-overlay hidden">
+    <div class="file-viewer-modal">
+        <div class="file-viewer-header">
+            <h3 id="fileViewerTitle">File Name</h3>
+            <button id="closeFileViewer" class="overlay-close-button">&times;</button>
+        </div>
+
+        <div class="file-viewer-tabs">
+            <button class="tab-button active" data-tab="original">Original</button>
+            <button class="tab-button" data-tab="processed">Processed</button>
+        </div>
+
+        <div class="file-viewer-content">
+            <div id="originalContent" class="tab-content active">
+                <!-- Content will be dynamically inserted -->
+            </div>
+            <div id="processedContent" class="tab-content">
+                <!-- Content will be dynamically inserted -->
+            </div>
+        </div>
+
+        <div class="file-viewer-metadata">
+            <div id="fileMetadata"></div>
+        </div>
+    </div>
+</div>

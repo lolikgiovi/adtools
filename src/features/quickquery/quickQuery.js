@@ -22,6 +22,7 @@ export class QuickQueryUI {
     this.attachmentProcessorService = new AttachmentProcessorService();
     this.isGuideActive = false;
     this.isAttachmentActive = false;
+    this.processedFiles = [];
 
     // Initialize search state
     this.searchState = {
@@ -105,6 +106,10 @@ export class QuickQueryUI {
       // Container elements
       tableSearchContainer: null,
       dropdownContainer: null,
+
+      // Attachment Preview Overlay Elements
+      filePreviewOverlay: document.getElementById("fileViewerOverlay"),
+      closeFilePreviewOverlayButton: document.getElementById("closeFileViewer"),
     };
   }
 
@@ -161,6 +166,22 @@ export class QuickQueryUI {
       },
       simulationGenerateQueryButton: {
         click: () => this.handleSimulationGenerateQuery(),
+      },
+
+      // Overlay handlers
+      schemaOverlay: {
+        click: (e) => {
+          if (e.target === this.elements.schemaOverlay) {
+            this.elements.schemaOverlay.classList.add("hidden");
+          }
+        },
+      },
+      filePreviewOverlay: {
+        click: (e) => {
+          if (e.target === this.elements.filePreviewOverlay) {
+            this.elements.filePreviewOverlay.classList.add("hidden");
+          }
+        },
       },
 
       // Data related buttons
@@ -343,7 +364,7 @@ export class QuickQueryUI {
 
       this.localStorageService.saveSchema(tableName, schemaData, inputData);
 
-      const query = this.queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData);
+      const query = this.queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData, this.processedFiles);
 
       this.editor.setValue(query);
       this.clearError();
@@ -935,42 +956,62 @@ export class QuickQueryUI {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
       try {
-        const processedFiles = await this.attachmentProcessorService.processAttachments(files);
-        console.log("Processed files:", processedFiles);
+        this.processedFiles = await this.attachmentProcessorService.processAttachments(files);
+        console.log("Processed files:", this.processedFiles);
 
         // Clear existing file buttons
         this.elements.filesContainer.innerHTML = "";
+        // Reset file input
+        this.elements.attachmentsInput.value = "";
 
         // Create file buttons for each processed file
-        processedFiles.forEach((file, index) => {
+        this.processedFiles.forEach((file, index) => {
           const fileButton = document.createElement("button");
           fileButton.className = "file-button";
           fileButton.innerHTML = `
-            <span class="file-name">${file.name}</span>
+            <div class="file-info">
+              <button class="copy-filename" title="Copy filename">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+              <span class="file-name">${file.name}</span>
+            </div>
             <div class="file-actions">
               <span class="file-size">${(file.size / 1024).toFixed(2)} KB</span>
               <button class="delete-file" title="Delete file">×</button>
             </div>
           `;
 
+          const copyBtn = fileButton.querySelector(".copy-filename");
+          copyBtn.addEventListener("click", (e) => {
+            e.stopPropagation(); // Prevent file button click
+            navigator.clipboard.writeText(file.name);
+
+            // Visual feedback
+            copyBtn.classList.add("copied");
+            setTimeout(() => copyBtn.classList.remove("copied"), 1000);
+          });
+
           // Add click handler for the delete button
           const deleteBtn = fileButton.querySelector(".delete-file");
           deleteBtn.addEventListener("click", (e) => {
             e.stopPropagation(); // Prevent file button click
-            processedFiles.splice(index, 1);
-            fileButton.remove();
+            const fileIndex = this.processedFiles.findIndex((f) => f.name === file.name);
+            if (fileIndex !== -1) {
+              this.processedFiles.splice(fileIndex, 1);
+              fileButton.remove();
+            }
 
             // If no files left, show the upload container again
-            if (processedFiles.length === 0) {
+            if (this.processedFiles.length === 0) {
               this.elements.filesContainer.classList.add("hidden");
               this.elements.attachmentsContainer.classList.remove("hidden");
             }
           });
 
-          fileButton.addEventListener("click", () => {
-            console.log("File details:", file);
-          });
-
+          fileButton.addEventListener("click", () => this.showFileViewer(file));
           this.elements.filesContainer.appendChild(fileButton);
         });
 
@@ -983,6 +1024,168 @@ export class QuickQueryUI {
         this.showError(`Error processing attachments: ${error.message}`);
       }
     }
+  }
+
+  showFileViewer(file) {
+    const overlay = document.getElementById("fileViewerOverlay");
+    const title = document.getElementById("fileViewerTitle");
+    const originalContent = document.getElementById("originalContent");
+    const processedContent = document.getElementById("processedContent");
+    const metadata = document.getElementById("fileMetadata");
+    const processedTab = document.querySelector('.tab-button[data-tab="processed"]');
+
+    console.log("File viewer showing for file:", file);
+    title.textContent = file.name;
+
+    // Clear previous content
+    originalContent.innerHTML = "";
+    processedContent.innerHTML = "";
+    metadata.innerHTML = "";
+
+    // Handle different file types
+    if (file.type.startsWith("image/") || file.type === "application/pdf") {
+      // For image and PDF files: Original = File, Processed = Base64
+
+      // Original content (actual file)
+      const viewer = document.createElement("div");
+      viewer.className = file.type.startsWith("image/") ? "image-viewer" : "pdf-viewer";
+
+      if (file.type.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.src = file.processedFormats.base64;
+        viewer.appendChild(img);
+
+        // Get image dimensions and update metadata once loaded
+        img.onload = () => {
+          document.querySelector(".dimensions").textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
+          // Update sizes in metadata after image loads
+          const imageSizeKB = (file.processedFormats.binary.length / 1024).toFixed(2);
+          const base64SizeKB = (file.processedFormats.base64.length / 1024).toFixed(2);
+          document.querySelector(".metadata-grid").innerHTML = `
+            <div>File Type: ${file.type}</div>
+            <div>Original Size: ${imageSizeKB} KB</div>
+            <div>Base64 Size: ${base64SizeKB} KB</div>
+            <div>Dimensions: ${img.naturalWidth} × ${img.naturalHeight}</div>
+          `;
+        };
+      } else {
+        // PDF viewer
+        const obj = document.createElement("object");
+        obj.data = file.processedFormats.base64;
+        obj.type = "application/pdf";
+        obj.width = "100%";
+        obj.height = "600px";
+        viewer.appendChild(obj);
+      }
+
+      originalContent.appendChild(viewer);
+
+      // Processed content (base64 string)
+      const pre = document.createElement("pre");
+      pre.className = "base64-content";
+      pre.textContent = file.processedFormats.base64;
+      processedContent.appendChild(pre);
+
+      // Show both tabs
+      processedTab.style.display = "block";
+
+      // Metadata
+      metadata.innerHTML = `
+      <div class="metadata-grid">
+        <div>File Type: ${file.type}</div>
+        <div>Original Size: ${(file.processedFormats.binary?.length / 1024 || 0).toFixed(2)} KB</div>
+        ${file.processedFormats.base64 ? `<div>Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB</div>` : ""}
+        ${file.type.startsWith("image/") ? '<div>Dimensions: <span class="dimensions">Loading...</span></div>' : ""}
+      </div>
+    `;
+    } else if (file.processedFormats.contentType?.includes("base64")) {
+      // For base64 text files: Original = Base64, Processed = Rendered content
+
+      // Original content (base64 text)
+      const pre = document.createElement("pre");
+      pre.className = "base64-content";
+      pre.textContent = file.processedFormats.original;
+      originalContent.appendChild(pre);
+
+      // Processed content (rendered base64)
+      const viewer = document.createElement("div");
+      viewer.className = "rendered-content";
+
+      if (file.processedFormats.base64.startsWith("data:image/")) {
+        const img = document.createElement("img");
+        img.src = file.processedFormats.base64;
+        viewer.appendChild(img);
+      } else if (file.processedFormats.base64.startsWith("data:application/pdf")) {
+        const obj = document.createElement("object");
+        obj.data = file.processedFormats.base64;
+        obj.type = "application/pdf";
+        viewer.appendChild(obj);
+      }
+
+      processedContent.appendChild(viewer);
+
+      // Show both tabs
+      processedTab.style.display = "block";
+
+      // Metadata
+      metadata.innerHTML = `
+      <div class="metadata-grid">
+        <div>File Type: ${file.type}</div>
+        <div>Original Media Size: ${(file.processedFormats.sizes.original / 1024 || 0).toFixed(2)} KB</div>
+        ${file.processedFormats.base64 ? `<div>Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB</div>` : ""}
+        ${file.type.startsWith("image/") ? '<div>Dimensions: <span class="dimensions">Loading...</span></div>' : ""}
+      </div>
+    `;
+    } else {
+      // For regular text files (txt, json, html): Only show original
+      const pre = document.createElement("pre");
+      pre.className = "text-content";
+      pre.textContent = file.processedFormats.original;
+      originalContent.appendChild(pre);
+
+      const textLength = file.processedFormats.original.length;
+      const lineCount = (file.processedFormats.original.match(/\n/g) || []).length + 1;
+
+      metadata.innerHTML = `
+        <div class="metadata-grid">
+          <div>File Type: ${file.type}</div>
+          <div>Size: ${(textLength / 1024).toFixed(2)} KB</div>
+          <div>Lines: ${lineCount}</div>
+          <div>Characters: ${textLength}</div>
+        </div>
+      `;
+
+      // Hide processed tab
+      processedTab.style.display = "none";
+    }
+
+    // Show overlay and set initial state
+    overlay.classList.remove("hidden");
+    document.querySelector('.tab-button[data-tab="original"]').classList.add("active");
+    document.getElementById("originalContent").classList.add("active");
+
+    // Add tab switching functionality
+    document.querySelectorAll(".tab-button").forEach((button) => {
+      button.onclick = () => {
+        document.querySelectorAll(".tab-button").forEach((btn) => btn.classList.remove("active"));
+        button.classList.add("active");
+
+        document.querySelectorAll(".tab-content").forEach((content) => content.classList.remove("active"));
+        document.getElementById(`${button.dataset.tab}Content`).classList.add("active");
+      };
+    });
+
+    // Add close button handler
+    document.getElementById("closeFileViewer").onclick = () => {
+      overlay.classList.add("hidden");
+    };
+  }
+
+  showFilePreview() {
+    this.elements.filePreviewOverlay.classList.remove("hidden");
+  }
+  closeFilePreview() {
+    this.elements.filePreviewOverlay.classList.add("hidden");
   }
 
   handleDragOver(e) {
