@@ -8,21 +8,12 @@ export class AttachmentValidationService {
 
     const fieldDataType = dataType.toUpperCase();
 
-    // Handle different data types
-    switch (fieldDataType) {
-      case "VARCHAR":
-      case "VARCHAR2":
-      case "CHAR":
-        return this.handleVarcharType(matchingFile, maxLength);
-
-      case "CLOB":
-        return this.handleClobType(matchingFile);
-
-      case "BLOB":
-        return this.handleBlobType(matchingFile);
-
-      default:
-        return null;
+    if (!["BLOB", "CLOB", "VARCHAR", "VARCHAR2", "CHAR"].includes(fieldDataType)) {
+      return null;
+    } else if (["VARCHAR", "VARCHAR2", "CHAR"].includes(fieldDataType)) {
+      return this.handleVarcharType(matchingFile, maxLength);
+    } else if (["CLOB"].includes(fieldDataType)) {
+      return this.handleClobType(matchingFile);
     }
   }
 
@@ -48,14 +39,5 @@ export class AttachmentValidationService {
       return file.processedFormats.original;
     }
     return file.processedFormats.base64;
-  }
-
-  handleBlobType(file) {
-    const binary = file.processedFormats.binary;
-    if (binary.length > 4000) {
-      // If binary is too large, return the filename instead
-      return file.name;
-    }
-    return Array.from(binary);
   }
 }

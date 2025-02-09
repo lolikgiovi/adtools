@@ -640,6 +640,7 @@
   background: none;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  border-radius: 0px;
 }
 
 .tab-button.active {

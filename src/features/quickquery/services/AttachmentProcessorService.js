@@ -8,7 +8,6 @@ export class AttachmentProcessorService {
   // based on its format, and returning it as three format for each file
   // 1. original value (for txt, html, json)
   // 2. base64 encoded value (for images, pdf)
-  // 3. binary value (for images, pdf)
 
   async processAttachments(files) {
     console.log("Processing attachments");
@@ -25,11 +24,9 @@ export class AttachmentProcessorService {
         processedFormats: {
           original: null,
           base64: null,
-          binary: null,
           sizes: {
             original: 0,
             base64: 0,
-            binary: 0,
           },
         },
       };
@@ -60,11 +57,6 @@ export class AttachmentProcessorService {
   }
 
   async handleMediaFile(file, processedFile) {
-    // Read as binary
-    const binaryData = await this.readFileAs(file, "arrayBuffer");
-    processedFile.processedFormats.binary = new Uint8Array(binaryData);
-    processedFile.processedFormats.sizes.binary = binaryData.byteLength;
-
     // Read as base64
     const base64Data = await this.readFileAs(file, "dataURL");
     processedFile.processedFormats.base64 = base64Data;
@@ -75,10 +67,6 @@ export class AttachmentProcessorService {
     const textContent = await this.readFileAs(file, "text");
     processedFile.processedFormats.original = textContent;
     processedFile.processedFormats.contentType = "text/plain";
-
-    const binaryData = await this.readFileAs(file, "arrayBuffer");
-    processedFile.processedFormats.binary = new Uint8Array(binaryData);
-    processedFile.processedFormats.sizes.binary = binaryData.byteLength;
 
     const cleaned = textContent.trim();
     if (!cleaned) {

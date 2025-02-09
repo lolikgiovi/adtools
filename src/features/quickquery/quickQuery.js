@@ -1040,12 +1040,25 @@ export class QuickQueryUI {
     // Clear previous content
     originalContent.innerHTML = "";
     processedContent.innerHTML = "";
-    metadata.innerHTML = "";
+
+    const metadataElements = {
+      fileType: document.getElementById("fileType"),
+      fileSize: document.getElementById("fileSize"),
+      base64Size: document.getElementById("base64Size"),
+      dimensions: document.getElementById("dimensions"),
+      lineCount: document.getElementById("lineCount"),
+      charCount: document.getElementById("charCount"),
+    };
+
+    // clear previous content
+    Object.values(metadataElements).forEach((el) => (el.textContent = ""));
+    Object.values(metadataElements).forEach((el) => el.classList.add("hidden"));
+    // Set common metadata
+    metadataElements.fileType.textContent = `File Type: ${file.type}`;
+    metadataElements.fileType.classList.remove("hidden");
 
     // Handle different file types
     if (file.type.startsWith("image/") || file.type === "application/pdf") {
-      // For image and PDF files: Original = File, Processed = Base64
-
       // Original content (actual file)
       const viewer = document.createElement("div");
       viewer.className = file.type.startsWith("image/") ? "image-viewer" : "pdf-viewer";
@@ -1055,18 +1068,15 @@ export class QuickQueryUI {
         img.src = file.processedFormats.base64;
         viewer.appendChild(img);
 
-        // Get image dimensions and update metadata once loaded
+        // Update metadata once image is loaded
         img.onload = () => {
-          document.querySelector(".dimensions").textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
-          // Update sizes in metadata after image loads
-          const imageSizeKB = (file.processedFormats.binary.length / 1024).toFixed(2);
-          const base64SizeKB = (file.processedFormats.base64.length / 1024).toFixed(2);
-          document.querySelector(".metadata-grid").innerHTML = `
-            <div>File Type: ${file.type}</div>
-            <div>Original Size: ${imageSizeKB} KB</div>
-            <div>Base64 Size: ${base64SizeKB} KB</div>
-            <div>Dimensions: ${img.naturalWidth} × ${img.naturalHeight}</div>
-          `;
+          metadataElements.fileSize.textContent = `Media Size: ${(file.size / 1024).toFixed(2)} KB`;
+          metadataElements.base64Size.textContent = `Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB`;
+          metadataElements.dimensions.textContent = `Dimensions: ${img.naturalWidth} × ${img.naturalHeight}`;
+
+          [metadataElements.fileSize, metadataElements.base64Size, metadataElements.dimensions].forEach((el) =>
+            el.classList.remove("hidden")
+          );
         };
       } else {
         // PDF viewer
@@ -1076,6 +1086,10 @@ export class QuickQueryUI {
         obj.width = "100%";
         obj.height = "600px";
         viewer.appendChild(obj);
+
+        metadataElements.fileSize.textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
+        metadataElements.base64Size.textContent = `Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB`;
+        [metadataElements.fileSize, metadataElements.base64Size].forEach((el) => el.classList.remove("hidden"));
       }
 
       originalContent.appendChild(viewer);
@@ -1088,16 +1102,6 @@ export class QuickQueryUI {
 
       // Show both tabs
       processedTab.style.display = "block";
-
-      // Metadata
-      metadata.innerHTML = `
-      <div class="metadata-grid">
-        <div>File Type: ${file.type}</div>
-        <div>Original Size: ${(file.processedFormats.binary?.length / 1024 || 0).toFixed(2)} KB</div>
-        ${file.processedFormats.base64 ? `<div>Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB</div>` : ""}
-        ${file.type.startsWith("image/") ? '<div>Dimensions: <span class="dimensions">Loading...</span></div>' : ""}
-      </div>
-    `;
     } else if (file.processedFormats.contentType?.includes("base64")) {
       // For base64 text files: Original = Base64, Processed = Rendered content
 
@@ -1127,15 +1131,12 @@ export class QuickQueryUI {
       // Show both tabs
       processedTab.style.display = "block";
 
-      // Metadata
-      metadata.innerHTML = `
-      <div class="metadata-grid">
-        <div>File Type: ${file.type}</div>
-        <div>Original Media Size: ${(file.processedFormats.sizes.original / 1024 || 0).toFixed(2)} KB</div>
-        ${file.processedFormats.base64 ? `<div>Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB</div>` : ""}
-        ${file.type.startsWith("image/") ? '<div>Dimensions: <span class="dimensions">Loading...</span></div>' : ""}
-      </div>
-    `;
+      metadataElements.fileSize.textContent = `Original Media Size: ${(file.processedFormats.sizes.original / 1024).toFixed(2)} KB`;
+      if (file.processedFormats.base64) {
+        metadataElements.base64Size.textContent = `Base64 Size: ${(file.processedFormats.base64.length / 1024).toFixed(2)} KB`;
+        metadataElements.base64Size.classList.remove("hidden");
+      }
+      metadataElements.fileSize.classList.remove("hidden");
     } else {
       // For regular text files (txt, json, html): Only show original
       const pre = document.createElement("pre");
@@ -1146,14 +1147,11 @@ export class QuickQueryUI {
       const textLength = file.processedFormats.original.length;
       const lineCount = (file.processedFormats.original.match(/\n/g) || []).length + 1;
 
-      metadata.innerHTML = `
-        <div class="metadata-grid">
-          <div>File Type: ${file.type}</div>
-          <div>Size: ${(textLength / 1024).toFixed(2)} KB</div>
-          <div>Lines: ${lineCount}</div>
-          <div>Characters: ${textLength}</div>
-        </div>
-      `;
+      metadataElements.fileSize.textContent = `Size: ${(textLength / 1024).toFixed(2)} KB`;
+      metadataElements.lineCount.textContent = `Lines: ${lineCount}`;
+      metadataElements.charCount.textContent = `Characters: ${textLength}`;
+
+      [metadataElements.fileSize, metadataElements.lineCount, metadataElements.charCount].forEach((el) => el.classList.remove("hidden"));
 
       // Hide processed tab
       processedTab.style.display = "none";
