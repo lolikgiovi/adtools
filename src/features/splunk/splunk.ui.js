@@ -26,7 +26,7 @@ export class SplunkUI {
       pasteButton: document.getElementById("pasteButton"),
       clearButton: document.getElementById("clearButton"),
       toggleHighlightButton: document.getElementById("toggleHighlightButton"),
-      removeSpacesButton: document.getElementById("removeSpacesButton")
+      removeSpacesButton: document.getElementById("removeSpacesButton"),
     };
 
     // Set initial button states
@@ -34,7 +34,7 @@ export class SplunkUI {
   }
 
   async loadDependencies() {
-    await DependencyLoader.loadDependency('codemirror');
+    await DependencyLoader.load("codemirror");
     this.initializeEditor();
     this.setupEventListeners();
   }
@@ -55,13 +55,12 @@ channelName=EVE|
 cifNo= $!{context.cifNo}|
 mobilePhone= $!{context.mobilePhone}|
 amount=$!{context.amount}|
-transactionDate=$!{date.convertDate($!{context.transactionDate},'yyyy-MM-dd HH:mm:ss')}`
+transactionDate=$!{date.convertDate($!{context.transactionDate},'yyyy-MM-dd HH:mm:ss')}`,
     });
   }
 
   setupEventListeners() {
-    const { formatButton, minifyButton, copyButton, pasteButton, clearButton, 
-           toggleHighlightButton, removeSpacesButton } = this.elements;
+    const { formatButton, minifyButton, copyButton, pasteButton, clearButton, toggleHighlightButton, removeSpacesButton } = this.elements;
 
     formatButton.addEventListener("click", () => {
       const formattedText = this.splunkService.formatText(this.editor.getValue(), false);
@@ -73,9 +72,7 @@ transactionDate=$!{date.convertDate($!{context.transactionDate},'yyyy-MM-dd HH:m
       this.editor.setValue(minifiedText);
     });
 
-    copyButton.addEventListener("click", () => 
-      copyToClipboard(this.editor.getValue(), copyButton)
-    );
+    copyButton.addEventListener("click", () => copyToClipboard(this.editor.getValue(), copyButton));
 
     pasteButton.addEventListener("click", () => this.handlePaste());
     clearButton.addEventListener("click", () => this.editor.setValue(""));
@@ -96,9 +93,7 @@ transactionDate=$!{date.convertDate($!{context.transactionDate},'yyyy-MM-dd HH:m
     } else {
       this.editor.setOption("mode", null);
     }
-    this.elements.toggleHighlightButton.textContent = this.highlightingEnabled
-      ? "Disable Highlight"
-      : "Enable Highlight";
+    this.elements.toggleHighlightButton.textContent = this.highlightingEnabled ? "Disable Highlight" : "Enable Highlight";
   }
 
   async handlePaste() {

@@ -1,5 +1,3 @@
-import { DependencyLoader } from "../../utils/dependencyLoader.js";
-
 export class HtmlService {
   formatHTML(content) {
     if (typeof html_beautify === "undefined") {
@@ -18,7 +16,6 @@ export class HtmlService {
 
   async parseVelocity(content, context = {}) {
     try {
-      await DependencyLoader.loadDependency("velocity");
       return window.Velocity.render(content, context);
     } catch (error) {
       console.error("Error in Velocity parsing:", error);

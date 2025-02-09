@@ -1,130 +1,95 @@
-// Import tool initializers
-import { initCodeMirror } from "./utils/codeMirror.js";
-import { initUuidGenerator } from "./features/uuid/uuid.js";
-import { initQueryInGenerator } from "./features/queryin/queryin.js";
-import { initImageConverter } from "./features/image/image.js";
-import { initSplunkTemplate } from "./features/splunk/splunk.js";
-import { initHtmlTemplate } from "./features/html/html.js";
-import { initScreenshotTemplate } from "./features/screenshot/screenshot.js";
-import { initQuerify } from "./features/querify/querify.js";
-import { initQuickQuery } from "./features/quickquery/quickQuery.js";
-import { trackFeatureUsage } from "./utils/analytics.js";
+// App.js
+import { AppState } from "./core/state.js";
+import { Router } from "./core/router.js";
+import { UIManager } from "./core/uiManager.js";
+import { ResourceLoader } from "./core/resourceLoader.js";
+import { Analytics } from "./core/analytics.js";
+import { TOOLS_CONFIG } from "./core/config.js";
 
 class App {
   constructor() {
-    this.tools = {
-      uuid: {
-        init: initUuidGenerator,
-        title: "UUIDv4",
-      },
-      queryin: {
-        init: initQueryInGenerator,
-        title: "Query IN",
-      },
-      image: {
-        init: initImageConverter,
-        title: "Image-Base64",
-      },
-      splunk: {
-        init: initSplunkTemplate,
-        title: "Splunk Template",
-      },
-      html: {
-        init: initHtmlTemplate,
-        title: "HTML Template",
-      },
-      screenshot: {
-        init: initScreenshotTemplate,
-        title: "Deploy Docs",
-      },
-      querify: {
-        init: initQuerify,
-        title: "Querify",
-      },
-      quickQuery: {
-        init: initQuickQuery,
-        title: "Quick Query",
-      },
-    };
-    this.currentTool = null;
-    this.codeMirror = null;
+    // Initialize core services
+    this.state = new AppState();
+    this.router = new Router(this);
+    this.ui = new UIManager(this);
+    this.resources = new ResourceLoader(this.state);
+    this.analytics = new Analytics();
+
+    // Bind methods
+    this.loadTool = this.loadTool.bind(this);
+    this.handleError = this.handleError.bind(this);
+
+    // Setup error handling
+    this.setupErrorHandling();
   }
 
   async init() {
     try {
-      this.codeMirror = await initCodeMirror();
-      this.setupNavigation();
+      this.state.setState({ isLoading: true });
+      // Setup UI
+      this.ui.setupNavigation();
 
-      // Get initial route from current path
-      const path = window.location.pathname;
-      const initialTool = path.startsWith("/tools/") ? path.split("/").pop() : Object.keys(this.tools)[7]; // Your default tool
+      // Initialize routing
+      await this.router.initializeRouting();
 
-      // Check if the tool exists
-      if (this.tools[initialTool]) {
-        this.loadTool(initialTool);
-      } else {
-        // Redirect to default tool if invalid URL
-        this.loadTool(Object.keys(this.tools)[7]);
-      }
+      this.state.setState({ isLoading: false });
     } catch (error) {
-      console.error("Failed to initialize CodeMirror:", error);
+      this.handleError("Initialization failed", error);
     }
   }
 
-  // Set Up the navigation buttons for each tool
-  setupNavigation() {
-    const nav = document.getElementById("main-nav");
-    Object.entries(this.tools).forEach(([toolName, toolInfo]) => {
-      const button = document.createElement("button");
-      button.textContent = toolInfo.title; // Use the custom title
-      button.id = `nav-${toolName}`; // Add an id to each button
-      button.addEventListener("click", () => this.loadTool(toolName));
-      nav.appendChild(button);
+  async loadTool(toolName) {
+    if (!TOOLS_CONFIG[toolName]) {
+      throw new Error(`Unknown tool: ${toolName}`);
+    }
+
+    try {
+      this.state.setState({ isLoading: true, error: null });
+      this.ui.showLoadingState();
+
+      // Load CSS first
+      await this.resources.loadToolCSS(toolName);
+
+      // Load and initialize tool
+      const initFunction = await this.resources.loadToolModule(toolName);
+      const contentDiv = this.ui.clearContent();
+      await initFunction(contentDiv);
+
+      // Update state and UI
+      this.state.setState({
+        currentTool: toolName,
+        isLoading: false,
+      });
+      this.ui.updateActiveButton(toolName);
+
+      // Track usage
+      this.analytics.scheduleTracking(toolName);
+    } catch (error) {
+      this.handleError(`Failed to load tool ${toolName}`, error);
+    }
+  }
+
+  setupErrorHandling() {
+    window.onerror = (msg, src, line, col, error) => {
+      this.handleError("An unexpected error occurred", error);
+    };
+
+    window.onunhandledrejection = (event) => {
+      this.handleError("An unexpected error occurred", event.reason);
+    };
+  }
+
+  handleError(context, error) {
+    const errorMessage = `${context}: ${error.message}`;
+    console.error(errorMessage, error);
+
+    this.state.setState({
+      error: errorMessage,
+      isLoading: false,
     });
+
+    this.ui.showError(errorMessage);
   }
-
-  loadTool(toolName) {
-    const contentDiv = document.getElementById("content");
-    contentDiv.innerHTML = "";
-    if (this.tools[toolName]) {
-      loadToolCSS(toolName);
-      this.currentTool = toolName;
-      this.tools[toolName].init(contentDiv);
-
-      // Use hash for local development, path for production
-      if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-        history.pushState(null, null, `#${toolName}`);
-      } else {
-        history.pushState(null, null, `/tools/${toolName}`);
-      }
-
-      this.updateActiveButton(toolName);
-      setTimeout(() => {
-        trackFeatureUsage(toolName);
-      }, 1000);
-    }
-  }
-
-  updateActiveButton(toolName) {
-    // Remove 'active' class from all buttons
-    document.querySelectorAll("#main-nav button").forEach((button) => {
-      button.classList.remove("active");
-    });
-    // Add 'active' class to the selected tool's button
-    const activeButton = document.getElementById(`nav-${toolName}`);
-    if (activeButton) {
-      activeButton.classList.add("active");
-    }
-  }
-}
-
-function loadToolCSS(toolName) {
-  if (document.querySelector(`link[href$="${toolName}.css"]`)) return; // Break if CSS Already loaded
-
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = `/src/styles/tools/${toolName}.css`;
-  document.head.appendChild(link);
 }
 
 export default App;

@@ -1,150 +1,127 @@
+// dependencyLoader.js
 export class DependencyLoader {
-  static #LOAD_TIMEOUT = 1000; // 1 second timeout
-  static #MAX_RETRIES = 2;
-
-  static #dependencies = {
-    jszip: "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js",
-    beautifier: "https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.0/beautify-html.min.js",
+  static dependencies = {
+    jszip: {
+      resources: ["https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"],
+    },
     codemirror: {
-      js: {
-        core: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js",
-        modes: ["https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"],
-      },
-      css: [
+      core: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js",
+      resources: [
+        // Core CSS
         "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css",
         "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/elegant.min.css",
         "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css",
+        // Modes
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/xml/xml.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/css/css.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/htmlmixed/htmlmixed.min.js",
+        // Addons
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closetag.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/html-hint.min.js",
       ],
     },
     handsontable: {
-      js: "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js",
-      css: ["https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css"],
-    },
-    velocity: {
-      js: "https://cdn.jsdelivr.net/npm/velocityjs@2.0.6/src/velocity.min.js",
+      resources: [
+        "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js",
+        "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css",
+      ],
     },
   };
 
-  static #loadedDependencies = new Set();
+  static loaded = new Set();
 
-  static async loadDependency(name) {
-    if (this.#loadedDependencies.has(name)) {
-      return Promise.resolve();
-    }
-
-    const dep = this.#dependencies[name];
-    if (!dep) {
-      return Promise.reject(new Error(`Unknown dependency: ${name}`));
-    }
-
-    if (typeof dep === "string") {
-      return this.#loadScript(name, dep);
-    } else {
-      const promises = [];
-      if (dep.js) {
-        if (name === "codemirror") {
-          // Load core first, then modes
-          await this.#loadScript(name, dep.js.core);
-          if (dep.js.modes) {
-            await Promise.all(dep.js.modes.map((url) => this.#loadScript(name, url)));
-          }
-        } else if (typeof dep.js === "string") {
-          promises.push(this.#loadScript(name, dep.js));
-        } else if (Array.isArray(dep.js)) {
-          promises.push(Promise.all(dep.js.map((url) => this.#loadScript(name, url))));
-        }
-      }
-      if (dep.css) {
-        promises.push(this.#loadCSS(name, dep.css));
-      }
-      return Promise.all(promises);
-    }
-  }
-
-  static #verifyDependency(name) {
-    switch (name) {
-      case "jszip":
-        return typeof window.JSZip !== "undefined";
-      case "codemirror":
-        return typeof window.CodeMirror !== "undefined";
-      case "beautifier":
-        return typeof window.html_beautify !== "undefined";
-      default:
-        return true;
-    }
-  }
-
-  static #loadWithTimeout(promise, timeout) {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Loading timeout")), timeout);
-      }),
-    ]);
-  }
-
-  static async #loadWithRetry(loadFn, name, maxRetries = this.#MAX_RETRIES) {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        await this.#loadWithTimeout(loadFn(), this.#LOAD_TIMEOUT);
-        if (this.#verifyDependency(name)) {
-          return;
-        }
-        throw new Error(`Dependency ${name} loaded but verification failed`);
-      } catch (error) {
-        if (attempt === maxRetries) {
-          throw new Error(`Failed to load ${name} after ${maxRetries} retries: ${error.message}`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
-      }
-    }
-  }
-
-  static #loadScript(name, url) {
-    return this.#loadWithRetry(
-      () =>
-        new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = url;
-          script.onload = () => {
-            this.#loadedDependencies.add(name);
-            resolve();
-          };
-          script.onerror = () => reject(new Error(`Failed to load ${name} from ${url}`));
-          document.head.appendChild(script);
-        }),
-      name
-    );
-  }
-
-  static #loadCSS(name, urls) {
-    return this.#loadWithRetry(
-      () =>
-        Promise.all(
-          urls.map((url) => {
-            return new Promise((resolve, reject) => {
-              const link = document.createElement("link");
-              link.rel = "stylesheet";
-              link.href = url;
-              link.onload = resolve;
-              link.onerror = () => reject(new Error(`Failed to load CSS ${name} from ${url}`));
-              document.head.appendChild(link);
-            });
+  static loadResource(url) {
+    return new Promise((resolve, reject) => {
+      const isCSS = url.endsWith(".css");
+      const element = isCSS
+        ? Object.assign(document.createElement("link"), {
+            rel: "stylesheet",
+            href: url,
           })
-        ).then(() => {
-          this.#loadedDependencies.add(name);
-        }),
-      name
-    );
+        : Object.assign(document.createElement("script"), {
+            src: url,
+          });
+
+      element.onload = resolve;
+      element.onerror = () => reject(new Error(`Failed to load ${url}`));
+      document.head.appendChild(element);
+    });
+  }
+
+  static async load(dependencyName) {
+    if (this.loaded.has(dependencyName)) {
+      console.log(`Dependency '${dependencyName}' has already been loaded, skipping...`);
+      return;
+    }
+
+    const dependency = this.dependencies[dependencyName];
+    if (!dependency) {
+      throw new Error(`Unknown dependency: ${dependencyName}`);
+    }
+
+    try {
+      // If there's a core file, load it first
+      if (dependency.core) {
+        console.log(`Loading core file for '${dependencyName}'...`);
+        await this.loadResource(dependency.core);
+      }
+
+      // Then load all additional resources in parallel
+      if (dependency.resources) {
+        console.log(`Loading additional resources for '${dependencyName}'...`);
+        await Promise.all(dependency.resources.map((url) => this.loadResource(url)));
+      }
+
+      this.loaded.add(dependencyName);
+      console.log(`Successfully loaded all files for dependency '${dependencyName}'`);
+    } catch (error) {
+      console.error(`Error loading ${dependencyName}:`, error);
+      throw error;
+    }
   }
 
   static async loadAll() {
-    const dependencies = Object.keys(this.#dependencies);
-    await Promise.all(dependencies.map((dep) => this.loadDependency(dep)));
-    console.log("All Dependencies Loaded");
+    const deps = Object.keys(this.dependencies);
+    await Promise.all(deps.map((dep) => this.load(dep)));
+    console.log("All dependencies loaded");
   }
 
-  static isLoaded(name) {
-    return this.#loadedDependencies.has(name);
+  // CodeMirror specific methods
+  static createCodeMirrorInstance(element, options = {}) {
+    if (!window.CodeMirror) {
+      throw new Error('CodeMirror is not loaded. Please load it first using DependencyLoader.load("codemirror")');
+    }
+
+    const defaultOptions = {
+      lineNumbers: true,
+      theme: "default",
+      mode: "text/x-sql", // Default to SQL mode
+      readOnly: false,
+    };
+
+    const mergedOptions = { ...defaultOptions, ...options };
+
+    // If HTML mode is requested, set some additional options
+    if (mergedOptions.mode === "htmlmixed") {
+      mergedOptions.autoCloseTags = true;
+      mergedOptions.autoCloseBrackets = true;
+      mergedOptions.extraKeys = { "Ctrl-Space": "autocomplete" };
+    }
+
+    return CodeMirror.fromTextArea(element, mergedOptions);
   }
 }
+
+// Example usage:
+// 1. Load CodeMirror and all its dependencies
+// await DependencyLoader.load('codemirror');
+
+// 2. Create a CodeMirror instance
+// const editor = DependencyLoader.createCodeMirrorInstance(textareaElement, {
+//   mode: 'htmlmixed',
+//   theme: 'material'
+// });

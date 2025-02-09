@@ -1,5 +1,4 @@
 import { copyToClipboard } from "../../utils/buttons.js";
-import { getQuickQueryMainHtmlPage, getQuickQueryTutorialHtmlPage } from "./constants/Templates.js";
 import { LocalStorageService } from "./services/LocalStorageService.js";
 import { QueryGenerationService } from "./services/QueryGenerationService.js";
 import { SchemaValidationService, isDbeaverSchema } from "./services/SchemaValidationService.js";
@@ -33,14 +32,11 @@ export class QuickQueryUI {
 
   async init() {
     try {
-      this.container.innerHTML = await getQuickQueryMainHtmlPage();
-      if (this.isGuideActive) {
-        document.getElementById("guideContainer").innerHTML = await getQuickQueryTutorialHtmlPage();
-      }
+      await this.loadHtmlTemplates();
       this.bindElements();
       this.clearError();
-      await DependencyLoader.loadDependency("handsontable");
-      await DependencyLoader.loadDependency("codemirror");
+      await DependencyLoader.load("handsontable");
+      await DependencyLoader.load("codemirror");
       await this.initializeComponents();
       this.setupEventListeners();
       this.setupTableNameSearch();
@@ -51,9 +47,18 @@ export class QuickQueryUI {
         console.log(error.message);
       } else {
         console.error("Error elements not bound yet:", error);
-        this.container.innerHTML = `<div class="error-message">Failed to initialize: ${error.message || "Unknown error"}</div>`;
+        this.container.innerHTML = `<div class="error-message">"Failure to load, please contact app's developer."</div>`;
       }
       throw error;
+    }
+  }
+
+  async loadHtmlTemplates() {
+    const mainHtmlResponse = await fetch("/src/features/quickquery/templates/main.html");
+    this.container.innerHTML = await mainHtmlResponse.text();
+    if (this.isGuideActive) {
+      const tutorialHtmlResponse = await fetch("/src/features/quickquery/templates/quickquery-tutorial.html");
+      document.getElementById("guideContainer").innerHTML = await tutorialHtmlResponse.text();
     }
   }
 
@@ -64,7 +69,7 @@ export class QuickQueryUI {
       this.elements.filesContainer.classList.add("hidden");
       this.elements.attachmentsContainer.classList.remove("hidden");
     } catch (error) {
-      throw new Error(`Failed to initialize components: ${error.message}`);
+      console.log(error);
     }
   }
 
