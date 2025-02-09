@@ -20,6 +20,9 @@ export class DependencyLoader {
       js: "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js",
       css: ["https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css"],
     },
+    velocity: {
+      js: "https://cdn.jsdelivr.net/npm/velocityjs@2.0.6/src/velocity.min.js",
+    },
   };
 
   static #loadedDependencies = new Set();

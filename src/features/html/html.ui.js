@@ -27,7 +27,7 @@ export class HtmlUI {
       toggleHighlightButton: document.getElementById("toggleHighlightButton"),
       baseUrlSelect: document.getElementById("baseUrl"),
       dynamicFieldsContainer: document.getElementById("dynamicFields"),
-      htmlPreview: document.getElementById("htmlPreview")
+      htmlPreview: document.getElementById("htmlPreview"),
     };
 
     // Set initial button states
@@ -36,22 +36,19 @@ export class HtmlUI {
   }
 
   initializeEditor() {
-    this.editor = CodeMirror(
-      document.querySelector(".html-content-area"),
-      {
-        mode: "htmlmixed",
-        lineWrapping: true,
-        lineNumbers: true,
-        theme: "default",
-        autoCloseTags: true,
-        autoCloseBrackets: true,
-        matchBrackets: true,
-        indentUnit: 2,
-        tabSize: 2,
-        indentWithTabs: false,
-        extraKeys: { "Ctrl-Space": "autocomplete" },
-      }
-    );
+    this.editor = CodeMirror(document.querySelector(".html-content-area"), {
+      mode: "htmlmixed",
+      lineWrapping: true,
+      lineNumbers: true,
+      theme: "default",
+      autoCloseTags: true,
+      autoCloseBrackets: true,
+      matchBrackets: true,
+      indentUnit: 2,
+      tabSize: 2,
+      indentWithTabs: false,
+      extraKeys: { "Ctrl-Space": "autocomplete" },
+    });
   }
 
   setupEventListeners() {
@@ -62,9 +59,9 @@ export class HtmlUI {
 
     document.getElementById("formatButton").addEventListener("click", () => this.formatHTML());
     document.getElementById("minifyButton").addEventListener("click", () => this.minifyHTML());
-    document.getElementById("copyButton").addEventListener("click", () => 
-      copyToClipboard(this.editor.getValue(), this.elements.copyButton)
-    );
+    document
+      .getElementById("copyButton")
+      .addEventListener("click", () => copyToClipboard(this.editor.getValue(), this.elements.copyButton));
     document.getElementById("pasteButton").addEventListener("click", () => this.handlePaste());
     document.getElementById("clearButton").addEventListener("click", () => this.editor.setValue(""));
     document.getElementById("loadImagesButton")?.addEventListener("click", () => this.loadImages());
@@ -77,17 +74,13 @@ export class HtmlUI {
   toggleWordWrap() {
     const isWrapped = this.editor.getOption("lineWrapping");
     this.editor.setOption("lineWrapping", !isWrapped);
-    this.elements.toggleWrapButton.textContent = isWrapped
-      ? "Enable Word Wrap"
-      : "Disable Word Wrap";
+    this.elements.toggleWrapButton.textContent = isWrapped ? "Enable Word Wrap" : "Disable Word Wrap";
   }
 
   toggleSyntaxHighlight() {
     const isHighlightEnabled = this.editor.getOption("mode") === "htmlmixed";
     this.editor.setOption("mode", isHighlightEnabled ? null : "htmlmixed");
-    this.elements.toggleHighlightButton.textContent = isHighlightEnabled
-      ? "Enable Syntax Highlight"
-      : "Disable Syntax Highlight";
+    this.elements.toggleHighlightButton.textContent = isHighlightEnabled ? "Enable Syntax Highlight" : "Disable Syntax Highlight";
   }
 
   formatHTML() {
@@ -100,23 +93,28 @@ export class HtmlUI {
     this.editor.setValue(minified);
   }
 
-  updatePreview() {
+  async updatePreview() {
     const content = this.editor.getValue();
     const dynamicFields = Array.from(document.querySelectorAll("#dynamicFields input"));
-    const replacedContent = this.htmlService.replaceVariables(
-      content,
-      this.elements.baseUrlSelect?.value || "",
-      dynamicFields
-    );
-    const parsedContent = parseVelocityTemplate(replacedContent);
+    const velocityContext = {};
+    dynamicFields.forEach((input) => {
+      velocityContext[input.name] = input.value;
+    });
+
+    // First parse Velocity template with the context
+    const velocityParsed = await this.htmlService.parseVelocity(content, velocityContext);
+
+    // Then handle baseUrl replacement
+    const replacedContent = this.htmlService.replaceVariables(velocityParsed, this.elements.baseUrlSelect?.value || "", dynamicFields);
+
     const previewDocument = this.elements.htmlPreview.contentDocument;
-    
+
     previewDocument.open();
     previewDocument.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <base href="${this.elements.baseUrlSelect?.value || ''}/" target="_blank">
+          <base href="${this.elements.baseUrlSelect?.value || ""}/" target="_blank">
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <style>
             body { 
@@ -140,7 +138,7 @@ export class HtmlUI {
           </style>
         </head>
         <body>
-          ${parsedContent}
+          ${replacedContent}
         </body>
       </html>
     `);
@@ -163,8 +161,7 @@ export class HtmlUI {
   }
 
   loadImages() {
-    const iframeDoc = this.elements.htmlPreview.contentDocument || 
-                      this.elements.htmlPreview.contentWindow.document;
+    const iframeDoc = this.elements.htmlPreview.contentDocument || this.elements.htmlPreview.contentWindow.document;
     this.htmlService.reloadImages(iframeDoc);
   }
 
