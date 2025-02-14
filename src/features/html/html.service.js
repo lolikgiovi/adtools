@@ -58,14 +58,14 @@ export class HtmlService {
       }
     }
 
-    // Detect Velocity $variable syntax
-    const velocityRegex = /\$(!?\{)?([a-zA-Z][a-zA-Z0-9_]*)}?/g;
-    while ((match = velocityRegex.exec(content)) !== null) {
-      const varName = match[2];
-      if (varName !== "baseUrl") {
-        fields.add(varName);
-      }
-    }
+    // // Detect Velocity $variable syntax
+    // const velocityRegex = /\$(!?\{)?([a-zA-Z][a-zA-Z0-9_]*)}?/g;
+    // while ((match = velocityRegex.exec(content)) !== null) {
+    //   const varName = match[2];
+    //   if (varName !== "baseUrl") {
+    //     fields.add(varName);
+    //   }
+    // }
 
     return Array.from(fields);
   }

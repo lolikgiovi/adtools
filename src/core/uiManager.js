@@ -40,16 +40,22 @@ export class UIManager {
 
   showLoadingState() {
     const contentDiv = document.getElementById("content");
-    contentDiv.innerHTML = '<div class="loading">Loading...</div>';
+    contentDiv.innerHTML = `
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+      </div>
+    `;
   }
 
   showError(message) {
     const contentDiv = document.getElementById("content");
     contentDiv.innerHTML = `
-      <div class="error-message">
-        <h3>Error</h3>
-        <p>${message}</p>
-        <button onclick="window.location.reload()">Reload Page</button>
+      <div class="error-container">
+        <div class="error-message">
+          <h3>Error</h3>
+          <p>${message}</p>
+          <button class="error-button" onclick="window.location.reload()">Reload Page</button>
+        </div>
       </div>
     `;
   }

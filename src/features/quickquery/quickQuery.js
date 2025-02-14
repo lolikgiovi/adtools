@@ -6,6 +6,7 @@ import { DependencyLoader } from "../../utils/dependencyLoader.js";
 import { sampleSchema1, sampleData1 } from "./constants/Constants.js";
 import { initialSchemaTableSpecification, initialDataTableSpecification } from "./constants/Constants.js";
 import { AttachmentProcessorService } from "./services/AttachmentProcessorService.js";
+import { MAIN_TEMPLATE, GUIDE_TEMPLATE, FILE_BUTTON_TEMPLATE } from "./templates/htmlTemplates.js";
 
 export class QuickQueryUI {
   constructor(container, updateHeaderTitle) {
@@ -28,48 +29,55 @@ export class QuickQueryUI {
       selectedIndex: -1,
       visibleItems: [],
     };
+
+    this.init();
   }
 
   async init() {
     try {
-      await this.loadHtmlTemplates();
+      // Load dependencies first before any DOM manipulation
+      await Promise.all([DependencyLoader.load("handsontable"), DependencyLoader.load("codemirror")]);
+
+      // Set HTML content
+      this.container.innerHTML = MAIN_TEMPLATE;
+      if (this.isGuideActive) {
+        const guideContainer = document.getElementById("guideContainer");
+        if (guideContainer) {
+          guideContainer.innerHTML = GUIDE_TEMPLATE;
+        }
+      }
+
+      // Initialize UI components
       this.bindElements();
       this.clearError();
-      await DependencyLoader.load("handsontable");
-      await DependencyLoader.load("codemirror");
       await this.initializeComponents();
       this.setupEventListeners();
       this.setupTableNameSearch();
       this.loadMostRecentSchema();
     } catch (error) {
       console.error("Failed to initialize Quick Query:", error);
-      if (this.elements.errorMessages) {
-        console.log(error.message);
-      } else {
-        console.error("Error elements not bound yet:", error);
-        this.container.innerHTML = `<div class="error-message">"Failure to load, please contact app's developer."</div>`;
-      }
+      this.container.innerHTML = `<div class="error-message">Failed to load: ${error.message}</div>`;
       throw error;
-    }
-  }
-
-  async loadHtmlTemplates() {
-    const mainHtmlResponse = await fetch("/src/features/quickquery/templates/main.html");
-    this.container.innerHTML = await mainHtmlResponse.text();
-    if (this.isGuideActive) {
-      const tutorialHtmlResponse = await fetch("/src/features/quickquery/templates/quickquery-tutorial.html");
-      document.getElementById("guideContainer").innerHTML = await tutorialHtmlResponse.text();
     }
   }
 
   async initializeComponents() {
     try {
+      // Ensure container elements exist before initializing
+      if (!this.elements.schemaContainer || !this.elements.dataContainer) {
+        throw new Error("Required containers not found in DOM");
+      }
+
       this.initializeSpreadsheets();
       this.initializeEditor();
-      this.elements.filesContainer.classList.add("hidden");
-      this.elements.attachmentsContainer.classList.remove("hidden");
+
+      if (this.elements.filesContainer && this.elements.attachmentsContainer) {
+        this.elements.filesContainer.classList.add("hidden");
+        this.elements.attachmentsContainer.classList.remove("hidden");
+      }
     } catch (error) {
-      console.log(error);
+      console.error("Failed to initialize components:", error);
+      throw error;
     }
   }
 
@@ -265,6 +273,15 @@ export class QuickQueryUI {
           this.handleAddFieldNames();
         }
       },
+      afterCreateRow: (index, amount) => {
+        console.log(amount, "Row created, for index:", index);
+        this.updateDataSpreadsheet();
+        this.handleAddFieldNames();
+      },
+      afterRemoveRow: () => {
+        this.updateDataSpreadsheet();
+        this.handleAddFieldNames();
+      },
       afterGetColHeader: function (col, TH) {
         const header = TH.querySelector(".colHeader");
         if (header) {
@@ -299,6 +316,8 @@ export class QuickQueryUI {
     const currentData = this.dataTable.getData();
 
     const columnHeaders = Array.from({ length: columnCount }, (_, i) => String.fromCharCode(65 + i));
+
+    console.log("Column headers:", columnHeaders);
 
     this.dataTable.updateSettings({
       colHeaders: columnHeaders,
@@ -503,17 +522,31 @@ export class QuickQueryUI {
     this.dataTable.loadData(newData);
   }
 
+  // handleAddNewSchemaRow() {
+  //   const currentData = this.schemaTable.getData();
+  //   const newRow = Array(6).fill(null);
+  //   const newData = [...currentData, newRow];
+  //   this.schemaTable.loadData(newData);
+  // }
+
+  // handleRemoveLastSchemaRow() {
+  //   const currentData = this.schemaTable.getData();
+  //   const newData = currentData.slice(0, -1);
+  //   this.schemaTable.loadData(newData);
+  // }
+
   handleAddNewSchemaRow() {
-    const currentData = this.schemaTable.getData();
-    const newRow = Array(6).fill(null);
-    const newData = [...currentData, newRow];
-    this.schemaTable.loadData(newData);
+    const currentRowCount = this.schemaTable.countRows();
+    // Insert a new row with empty cells for all columns
+    this.schemaTable.alter("insert_row_below", currentRowCount - 1, 1);
+    this.schemaTable.render();
   }
 
   handleRemoveLastSchemaRow() {
-    const currentData = this.schemaTable.getData();
-    const newData = currentData.slice(0, -1);
-    this.schemaTable.loadData(newData);
+    const lastRowIndex = this.schemaTable.countRows() - 1;
+    if (lastRowIndex >= 0) {
+      this.schemaTable.alter("remove_row", lastRowIndex);
+    }
   }
 
   handleClearAllSchemas() {
@@ -969,25 +1002,75 @@ export class QuickQueryUI {
         // Reset file input
         this.elements.attachmentsInput.value = "";
 
+        // Add minify button if there's a text file
+        const hasTextFile = this.processedFiles.some((file) => ["txt", "html", "json"].includes(file.name.split(".").pop().toLowerCase()));
+
+        if (hasTextFile) {
+          const buttonContainer = document.createElement("div");
+          buttonContainer.className = "attachment-actions";
+
+          const minifyButton = document.createElement("button");
+          minifyButton.className = "minify-button";
+          minifyButton.textContent = "Minify Content";
+          minifyButton.addEventListener("click", async () => {
+            // Show processing state
+            minifyButton.textContent = "Processing...";
+            minifyButton.disabled = true;
+
+            // Process files
+            this.processedFiles = this.processedFiles.map((file) => {
+              const ext = file.name.split(".").pop().toLowerCase();
+              if (["txt", "html", "json"].includes(ext)) {
+                return this.attachmentProcessorService.minifyContent(file);
+              }
+              return file;
+            });
+
+            // Refresh the file viewer if it's currently open and visible
+            const fileViewer = document.getElementById("fileViewerOverlay");
+            const isViewerVisible = !fileViewer.classList.contains("hidden");
+
+            if (isViewerVisible) {
+              const activeFileName = document.getElementById("fileViewerTitle")?.textContent;
+              const activeFile = this.processedFiles.find((f) => f.name === activeFileName);
+              if (activeFile) {
+                this.showFileViewer(activeFile);
+              }
+            }
+
+            // Show success message
+            minifyButton.textContent = "Content Minified!";
+
+            setTimeout(() => {
+              minifyButton.textContent = "Minify Content";
+              minifyButton.style.color = "";
+              minifyButton.disabled = false;
+            }, 1000);
+          });
+          this.elements.filesContainer.appendChild(minifyButton);
+
+          const deleteAllButton = document.createElement("button");
+          deleteAllButton.className = "delete-all-button";
+          deleteAllButton.textContent = "Delete All Attachments";
+          deleteAllButton.addEventListener("click", () => {
+            if (confirm("Are you sure you want to delete all attachments?")) {
+              this.processedFiles = [];
+              this.elements.filesContainer.innerHTML = "";
+              this.elements.filesContainer.classList.add("hidden");
+              this.elements.attachmentsContainer.classList.remove("hidden");
+            }
+          });
+
+          buttonContainer.appendChild(minifyButton);
+          buttonContainer.appendChild(deleteAllButton);
+          this.elements.filesContainer.appendChild(buttonContainer);
+        }
+
         // Create file buttons for each processed file
         this.processedFiles.forEach((file, index) => {
           const fileButton = document.createElement("button");
           fileButton.className = "file-button";
-          fileButton.innerHTML = `
-            <div class="file-info">
-              <button class="copy-filename" title="Copy filename">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-              <span class="file-name">${file.name}</span>
-            </div>
-            <div class="file-actions">
-              <span class="file-size">${(file.size / 1024).toFixed(2)} KB</span>
-              <button class="delete-file" title="Delete file">×</button>
-            </div>
-          `;
+          fileButton.innerHTML = FILE_BUTTON_TEMPLATE(file);
 
           const copyBtn = fileButton.querySelector(".copy-filename");
           copyBtn.addEventListener("click", (e) => {
@@ -1212,7 +1295,5 @@ export class QuickQueryUI {
 
 // Export the main initialization function
 export async function initQuickQuery(container) {
-  const quickQueryUI = new QuickQueryUI(container);
-  await quickQueryUI.init();
-  return quickQueryUI;
+  return new QuickQueryUI(container);
 }

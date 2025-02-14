@@ -114,4 +114,47 @@ export class AttachmentProcessorService {
       }
     });
   }
+
+  minifyContent(file) {
+    if (!file.processedFormats.original) return file;
+
+    const extension = file.name.split(".").pop().toLowerCase();
+    let minified = file.processedFormats.original;
+
+    switch (extension) {
+      case "html":
+        // Minify HTML: remove extra spaces, newlines, and comments
+        minified = minified
+          .replace(/<!--[\s\S]*?-->/g, "") // Remove comments
+          .replace(/\s+/g, " ") // Replace multiple spaces with single space
+          .replace(/>\s+</g, "><") // Remove spaces between tags
+          .trim();
+        break;
+
+      case "json":
+        // Minify JSON: parse and stringify without spaces
+        try {
+          minified = JSON.stringify(JSON.parse(minified));
+        } catch (e) {
+          console.error("JSON minification failed:", e);
+        }
+        break;
+
+      default:
+        // For other text files: remove extra spaces and empty lines
+        minified = minified
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line)
+          .join("\n");
+    }
+
+    return {
+      ...file,
+      processedFormats: {
+        ...file.processedFormats,
+        original: minified,
+      },
+    };
+  }
 }

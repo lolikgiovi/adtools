@@ -1,3 +1,5 @@
+import { commonDateFormats } from "../constants/Constants.js";
+
 export class ValueProcessorService {
   constructor() {}
 
@@ -223,11 +225,13 @@ export class ValueProcessorService {
       }
 
       // 2. Handle timestamps with fractional seconds
-      if (value.includes(".") || value.includes(",")) {
-        const [datePart, fractionalPart] = value.split(/[.,]/);
+      if (value.includes(",")) {
+        // First replace dots in time with colons, but keep the date dots
+        const normalizedValue = value.replace(/(\d{2})\.(\d{2})\.(\d{2}),/, "$1:$2:$3,");
+        const [datePart, fractionalPart] = normalizedValue.split(",");
         const precision = Math.min(fractionalPart?.length || 0, 9);
 
-        const parsed = moment(datePart);
+        const parsed = moment(datePart, "DD-MM-YYYY HH:mm:ss", true);
         if (parsed.isValid()) {
           return `TO_TIMESTAMP('${parsed.format("YYYY-MM-DD HH:mm:ss")}.${fractionalPart.substring(
             0,
@@ -336,29 +340,8 @@ export class ValueProcessorService {
       return true;
     }
 
-    // Try parsing with common formats first (strict mode)
-    const commonFormats = [
-      "YYYY-MM-DD HH:mm:ss",
-      "YYYY-MM-DD[T]HH:mm:ss.SSSZ", // ISO 8601
-      "DD-MM-YYYY HH:mm:ss",
-      "MM/DD/YYYY HH:mm:ss",
-      "DD/MM/YYYY HH:mm:ss",
-      "YYYY-MM-DD",
-      "DD-MM-YYYY",
-      "MM/DD/YYYY",
-      "DD/MM/YYYY",
-      "DD-MMM-YYYY",
-      "DD-MMM-YY",
-      "DD.MM.YYYY HH:mm:ss",
-      "DD.MM.YYYY",
-      "YYYY/MM/DD HH:mm:ss",
-      "YYYY/MM/DD",
-      "MM/DD/YYYY hh:mm:ss A",
-      "DD-MM-YYYY hh:mm:ss A",
-    ];
-
     // Try strict parsing with common formats
-    if (commonFormats.some((format) => moment(value, format, true).isValid())) {
+    if (commonDateFormats.some((format) => moment(value, format, true).isValid())) {
       return true;
     }
 

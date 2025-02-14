@@ -300,3 +300,65 @@ export const sampleData2 = [
     '<?xml version="1.0"?><root>TEST</root>', // XML in CLOB
   ],
 ];
+
+export const commonDateFormats = [
+  // ISO formats
+  "YYYY-MM-DD HH:mm:ss",
+  "YYYY-MM-DD[T]HH:mm:ss.SSSZ",
+  "YYYY-MM-DD[T]HH:mm:ssZ",
+  "YYYY-MM-DD[T]HH:mm:ss",
+
+  // European formats (DD first)
+  "DD-MM-YYYY HH:mm:ss",
+  "DD/MM/YYYY HH:mm:ss",
+  "DD.MM.YYYY HH:mm:ss",
+  "DD-MM-YYYY HH.mm.ss",
+  "DD/MM/YYYY HH.mm.ss",
+  "DD.MM.YYYY HH.mm.ss",
+  "DD-MM-YYYY",
+  "DD/MM/YYYY",
+  "DD.MM.YYYY",
+
+  // US formats (MM first)
+  "MM/DD/YYYY HH:mm:ss",
+  "MM-DD-YYYY HH:mm:ss",
+  "MM.DD.YYYY HH:mm:ss",
+  "MM/DD/YYYY",
+  "MM-DD-YYYY",
+  "MM.DD.YYYY",
+
+  // Year first formats
+  "YYYY/MM/DD HH:mm:ss",
+  "YYYY-MM-DD HH:mm:ss",
+  "YYYY.MM.DD HH:mm:ss",
+  "YYYY/MM/DD",
+  "YYYY-MM-DD",
+  "YYYY.MM.DD",
+
+  // Month name formats
+  "DD-MMM-YYYY HH:mm:ss",
+  "DD MMM YYYY HH:mm:ss",
+  "DD-MMM-YYYY",
+  "DD MMM YYYY",
+  "DD-MMM-YY",
+  "DD MMM YY",
+
+  // AM/PM formats
+  "MM/DD/YYYY hh:mm:ss A",
+  "DD-MM-YYYY hh:mm:ss A",
+  "YYYY-MM-DD hh:mm:ss A",
+  "DD/MM/YYYY hh:mm:ss A",
+  "MM-DD-YYYY hh:mm:ss A",
+  "DD.MM.YYYY hh:mm:ss A",
+
+  // Time only variations
+  "YYYY-MM-DD HH:mm",
+  "DD-MM-YYYY HH:mm",
+  "MM/DD/YYYY HH:mm",
+  "YYYY/MM/DD HH:mm",
+
+  // Fractional seconds
+  "YYYY-MM-DD HH:mm:ss.SSS",
+  "DD-MM-YYYY HH:mm:ss.SSS",
+  "MM/DD/YYYY HH:mm:ss.SSS",
+];

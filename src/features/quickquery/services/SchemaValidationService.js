@@ -13,8 +13,15 @@ export class SchemaValidationService {
     const invalidNullableValues = [];
 
     // Validate each row in the schema once
-    schemaData.forEach((row) => {
+    schemaData.forEach((row, index) => {
       const [fieldName, dataType, nullable] = row;
+
+      // Check if any required field is empty
+      if (!fieldName || !dataType || !nullable) {
+        throw new Error(
+          `Schema Validation Error:<br>Row ${index + 1} of schema is not defined. Field Name, Data Type, and Nullable are required.`
+        );
+      }
 
       // Validate data type
       if (!this.isValidOracleDataType(dataType)) {

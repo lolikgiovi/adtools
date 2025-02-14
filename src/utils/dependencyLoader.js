@@ -30,6 +30,13 @@ export class DependencyLoader {
         "https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css",
       ],
     },
+    beautifier: {
+      resources: [
+        "https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify-html.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify-css.min.js",
+      ],
+    },
   };
 
   static loaded = new Set();
@@ -66,13 +73,11 @@ export class DependencyLoader {
     try {
       // If there's a core file, load it first
       if (dependency.core) {
-        console.log(`Loading core file for '${dependencyName}'...`);
         await this.loadResource(dependency.core);
       }
 
       // Then load all additional resources in parallel
       if (dependency.resources) {
-        console.log(`Loading additional resources for '${dependencyName}'...`);
         await Promise.all(dependency.resources.map((url) => this.loadResource(url)));
       }
 
