@@ -5,16 +5,9 @@ export class ReloadManager {
     const lastReload = localStorage.getItem("lastReload");
     const now = new Date().getTime();
 
-    if (lastReload) {
-      this.logReloadTimes(lastReload);
-    } else {
-      console.log("No previous reload recorded.");
-    }
-
     if (this.shouldReload(lastReload, now)) {
       this.performReload(now);
     } else {
-      console.log("No reload needed at this time.");
     }
   }
 
@@ -23,16 +16,7 @@ export class ReloadManager {
   }
 
   performReload(now) {
-    console.log("Performing reload now...");
     localStorage.setItem("lastReload", now.toString());
     window.location.reload(true);
-  }
-
-  logReloadTimes(lastReload) {
-    const lastReloadDate = new Date(parseInt(lastReload));
-    const nextReloadDate = new Date(parseInt(lastReload) + ReloadManager.ONE_DAY_MS);
-
-    console.log(`Last reload: ${lastReloadDate.toLocaleString()}`);
-    console.log(`Next reload due: ${nextReloadDate.toLocaleString()}`);
   }
 }
