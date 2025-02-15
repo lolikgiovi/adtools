@@ -732,14 +732,10 @@ export class QuickQueryUI {
     this.elements.tableSearchContainer = container;
     this.elements.dropdownContainer = dropdownContainer;
 
-    this.setupSearchEventListeners(container, dropdownContainer, tableNameInput);
+    // this.setupSearchEventListeners(container, dropdownContainer, tableNameInput);
   }
 
   setupSearchEventListeners(container, dropdownContainer, tableNameInput) {
-    // Event Listeners
-    tableNameInput.addEventListener("input", (e) => this.handleSearchInput(e));
-    tableNameInput.addEventListener("keydown", (e) => this.handleSearchKeyDown(e));
-
     // Close dropdown when clicking outside
     document.addEventListener("click", (event) => {
       if (!container.contains(event.target)) {

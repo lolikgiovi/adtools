@@ -152,15 +152,16 @@ export class HtmlUI {
     const dynamicFields = Array.from(document.querySelectorAll("#dynamicFields input"));
     const velocityContext = {};
     dynamicFields.forEach((input) => {
-      // if (input.value && input.value.trim() !== "") {
-      const value = input.value.trim().toLowerCase();
-      // Convert "true"/"false" strings to boolean values
-      if (value === "true" || value === "false") {
-        velocityContext[input.name] = value === "true";
-      } else {
-        velocityContext[input.name] = input.value;
+      if (input.value && input.value.trim() !== "") {
+        // field with null values are not included in velocityContext
+        const value = input.value.trim().toLowerCase();
+        // Convert "true"/"false" strings to boolean values
+        if (value === "true" || value === "false") {
+          velocityContext[input.name] = value === "true";
+        } else {
+          velocityContext[input.name] = input.value;
+        }
       }
-      // }
     });
     console.log(velocityContext);
 

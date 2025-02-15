@@ -1,4 +1,3 @@
-// dependencyLoader.js
 export class DependencyLoader {
   static dependencies = {
     jszip: {
@@ -41,7 +40,8 @@ export class DependencyLoader {
       resources: ["https://cdn.jsdelivr.net/npm/marked/marked.min.js"],
     },
     velocityjs: {
-      resources: ["https://cdn.jsdelivr.net/npm/velocity-template@0.1.3/velocity.min.js"],
+      // resources: ["https://cdn.jsdelivr.net/npm/velocity-template@0.1.3/velocity.min.js"],
+      resources: ["/src/modified_lib/velocity-bundle.js"],
     },
   };
 

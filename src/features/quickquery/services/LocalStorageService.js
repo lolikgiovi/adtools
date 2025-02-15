@@ -168,13 +168,26 @@ export class LocalStorageService {
   }
 
   validateOracleName(name, type = "schema") {
-    if (!name) return false;
+    if (type === "table" && typeof name === "undefined") {
+      return true; // Allow undefined table names when only typing schema name
+    }
 
-    if (!ORACLE_NAME_REGEX.test(name)) return false;
+    if (!name) {
+      return false;
+    }
+
+    if (!ORACLE_NAME_REGEX.test(name)) {
+      return false;
+    }
 
     const byteLength = this.getByteLength(name);
-    if (type === "schema" && byteLength > MAX_SCHEMA_LENGTH) return false;
-    if (type === "table" && byteLength > MAX_TABLE_LENGTH) return false;
+
+    if (type === "schema" && byteLength > MAX_SCHEMA_LENGTH) {
+      return false;
+    }
+    if (type === "table" && byteLength > MAX_TABLE_LENGTH) {
+      return false;
+    }
 
     return true;
   }
@@ -187,25 +200,64 @@ export class LocalStorageService {
     const parts = schemaName.split("_");
     const abbrs = new Set();
 
+    // First letters abbreviation
     abbrs.add(parts.map((part) => part[0]?.toLowerCase()).join(""));
 
-    if (parts.length > 2) {
-      abbrs.add(
-        parts
-          .slice(0, 2)
-          .map((part) => part[0]?.toLowerCase())
-          .join("")
-      );
+    // For single words, generate common abbreviation patterns
+    if (parts.length === 1) {
+      const word = parts[0].toLowerCase();
+
+      // Generate all possible consonant combinations
+      const consonants = word.replace(/[aeiou]/g, "");
+      for (let i = 1; i <= consonants.length; i++) {
+        abbrs.add(consonants.slice(0, i));
+      }
+
+      // Generate progressive abbreviations (both from start and with consonants)
+      for (let i = 1; i <= Math.min(4, word.length); i++) {
+        abbrs.add(word.slice(0, i)); // Normal slice (e.g., "c", "co", "con", "conf")
+
+        // Consonant-based slice (e.g., "cfg" for "config")
+        let consonantBased = word.slice(0, i).replace(/[aeiou]/g, "");
+        abbrs.add(consonantBased);
+      }
+
+      // Add common variations (e.g., "cfg" for "config")
+      if (word.startsWith("config")) abbrs.add("cfg");
+      if (word.startsWith("temp")) abbrs.add("tmp");
+      if (word.startsWith("database")) abbrs.add("db");
     }
 
-    for (let i = 0; i < parts.length - 1; i++) {
-      abbrs.add(
-        parts
-          .slice(i, i + 2)
-          .map((part) => part[0]?.toLowerCase())
-          .join("")
-      );
-    }
+    // For multi-word combinations
+    parts.forEach((part, index) => {
+      const word = part.toLowerCase();
+
+      // Add first N chars of each part
+      for (let i = 1; i <= Math.min(4, word.length); i++) {
+        if (index === 0) {
+          abbrs.add(word.slice(0, i));
+        } else {
+          // Combine with first letter of previous parts
+          const prefix = parts
+            .slice(0, index)
+            .map((p) => p[0]?.toLowerCase())
+            .join("");
+          abbrs.add(prefix + word.slice(0, i));
+        }
+      }
+
+      // Add consonant combinations for each part
+      const consonants = word.replace(/[aeiou]/g, "");
+      if (index === 0) {
+        abbrs.add(consonants);
+      } else {
+        const prefix = parts
+          .slice(0, index)
+          .map((p) => p[0]?.toLowerCase())
+          .join("");
+        abbrs.add(prefix + consonants);
+      }
+    });
 
     return abbrs;
   }
@@ -255,21 +307,25 @@ export class LocalStorageService {
       return allTables
         .filter((table) => {
           const schemaAbbrs = this.getSchemaAbbreviations(table.schemaName);
+          const tableAbbrs = this.getSchemaAbbreviations(table.tableName); // Add table abbreviations
           return (
-            (schemaPattern.test(table.schemaName) || schemaAbbrs.has(schemaSearch.toLowerCase())) && tablePattern.test(table.tableName)
+            (schemaPattern.test(table.schemaName) || schemaAbbrs.has(schemaSearch.toLowerCase())) &&
+            (tablePattern.test(table.tableName) || tableAbbrs.has(tableSearch.toLowerCase())) // Check table abbreviations
           );
         })
         .sort((a, b) => {
           const schemaAbbrsA = this.getSchemaAbbreviations(a.schemaName);
           const schemaAbbrsB = this.getSchemaAbbreviations(b.schemaName);
+          const tableAbbrsA = this.getSchemaAbbreviations(a.tableName); // Add table abbreviations
+          const tableAbbrsB = this.getSchemaAbbreviations(b.tableName);
 
           const schemaMatchA = schemaSearch.toLowerCase() === a.schemaName.toLowerCase() || schemaAbbrsA.has(schemaSearch.toLowerCase());
           const schemaMatchB = schemaSearch.toLowerCase() === b.schemaName.toLowerCase() || schemaAbbrsB.has(schemaSearch.toLowerCase());
 
           if (schemaMatchA !== schemaMatchB) return schemaMatchB ? 1 : -1;
 
-          const tableMatchA = tableSearch.toLowerCase() === a.tableName.toLowerCase();
-          const tableMatchB = tableSearch.toLowerCase() === b.tableName.toLowerCase();
+          const tableMatchA = tableSearch.toLowerCase() === a.tableName.toLowerCase() || tableAbbrsA.has(tableSearch.toLowerCase());
+          const tableMatchB = tableSearch.toLowerCase() === b.tableName.toLowerCase() || tableAbbrsB.has(tableSearch.toLowerCase());
 
           return tableMatchA ? -1 : tableMatchB ? 1 : 0;
         });

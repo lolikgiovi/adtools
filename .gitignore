@@ -1,0 +1,13 @@
+# VS Code settings
+.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Prettier Config
+# .prettierrc #I'll keep it synced for this project
+
+# Zip files
+*.zip
