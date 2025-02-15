@@ -1,6 +1,6 @@
 export const APP_CONFIG = {
   DEFAULT_TOOL: "home",
-  ANALYTICS_DELAY: 1000, //milliseconds
+  ANALYTICS_DELAY: 2000, //delay when to start count feature as being used
   IS_DEVELOPMENT: ["localhost", "127.0.0.1"].includes(location.hostname),
   BASE_CSS_PATH: "/src/styles/features",
   TOOLS_BASE_PATH: "/tools",
