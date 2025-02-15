@@ -40,6 +40,9 @@ export class DependencyLoader {
     marked: {
       resources: ["https://cdn.jsdelivr.net/npm/marked/marked.min.js"],
     },
+    velocityjs: {
+      resources: ["https://cdn.jsdelivr.net/npm/velocity-template@0.1.3/velocity.min.js"],
+    },
   };
 
   static loaded = new Set();

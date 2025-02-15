@@ -152,11 +152,30 @@ export class HtmlUI {
     const dynamicFields = Array.from(document.querySelectorAll("#dynamicFields input"));
     const velocityContext = {};
     dynamicFields.forEach((input) => {
-      velocityContext[input.name] = input.value;
+      // if (input.value && input.value.trim() !== "") {
+      const value = input.value.trim().toLowerCase();
+      // Convert "true"/"false" strings to boolean values
+      if (value === "true" || value === "false") {
+        velocityContext[input.name] = value === "true";
+      } else {
+        velocityContext[input.name] = input.value;
+      }
+      // }
     });
+    console.log(velocityContext);
 
-    // First parse Velocity template with the context
-    const velocityParsed = await this.htmlService.parseVelocity(content, velocityContext);
+    // Parse Velocity template with the context using VelocityJS
+    let velocityParsed = content;
+    try {
+      if (window.Velocity) {
+        velocityParsed = window.Velocity.render(content, velocityContext);
+      } else {
+        console.warn("VelocityJS not loaded yet");
+      }
+    } catch (error) {
+      console.error("Velocity parsing error:", error);
+      velocityParsed = content;
+    }
 
     // Then handle baseUrl replacement
     const replacedContent = this.htmlService.replaceVariables(velocityParsed, this.elements.baseUrlSelect?.value || "", dynamicFields);
@@ -200,7 +219,6 @@ export class HtmlUI {
     const content = this.editor.getValue();
     const fields = this.htmlService.detectDynamicFields(content);
 
-    console.log("Dynamic Fields", fields);
     const container = this.elements.dynamicFieldsContainer.closest(".dynamic-fields-container");
 
     this.elements.dynamicFieldsContainer.innerHTML = "";
