@@ -197,6 +197,15 @@
   font-style: italic;
 }
 
+.markdown-content a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-content a:hover {
+  opacity: 0.8;
+}
+
 @media (max-width: 768px) {
   .home-container {
     padding: 1rem;

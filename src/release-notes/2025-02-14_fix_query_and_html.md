@@ -16,4 +16,4 @@
 - Update code structure to be more modular
 - Still using dependencies from CDN, but no double loading
 
-> © 2025 Fashalli Giovi - All rights reserved
+> © 2025 - <a href="https://www.linkedin.com/in/fashalli/" target="_blank" rel="noopener noreferrer">Fashalli Giovi</a>
