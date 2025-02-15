@@ -1,15 +1,15 @@
-# Release Notes - February 14, 2025 <s>(Happy Valentine's Day)</s>
+# Release Notes - February 14, 2025
 
 ## Quick Query
 
-- Bug Fixed: Fixed issue with query parameters not being properly escaped in MERGE Statements for some cases
-- New Feature: Upload attachment files (Image, Text, PDF, JSON, HTML) and create query with it.
-- New Feature: Your latest Spreadsheet Data (Table Below) will be saved in Local Storage.
+- <b>Bug Fixed</b>: Fixed issue with query parameters not being properly escaped in MERGE Statements for some cases
+- <b>New Feature</b>: Upload attachment files (Image, Text, PDF, JSON, HTML) and create query with it.
+- <b>New Feature</b>: Your latest Spreadsheet Data (Table Below) will be saved in Local Storage.
 
 ## HTML Template
 
-- Bug Fixed: Now can render HTML Templates smoothly.
-- New Feature: Base URL Management - Populate your Base URLs and load the HTML with it, saved in Local Storage.
+- <b>Bug Fixed</b>: Now can render HTML Templates smoothly.
+- <b>New Feature</b>: Base URL Management - Populate your Base URLs and load the HTML with it, saved in Local Storage.
 
 ## Technical Updates
 
