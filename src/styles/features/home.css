@@ -129,6 +129,74 @@
   opacity: 0.7;
 }
 
+.release-notes {
+  margin-bottom: 3rem;
+}
+
+.release-notes-header {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.release-notes-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.release-notes-button {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: color 0.2s ease;
+}
+
+.release-notes-button:hover {
+  background: none;
+  color: red;
+}
+
+.release-notes-card {
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.markdown-content {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdown-content h1 {
+  font-size: 1.8em;
+  margin-bottom: 16px;
+}
+
+.markdown-content h2 {
+  font-size: 1.5em;
+  margin: 16px 0 8px 0;
+}
+
+.markdown-content ul {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid var(--primary-color);
+  margin: 1rem 0;
+  padding: 0.5rem 0 0.5rem 1rem;
+  background-color: rgba(0, 0, 0, 0.03);
+  color: var(--text-color);
+  font-style: italic;
+}
+
 @media (max-width: 768px) {
   .home-container {
     padding: 1rem;

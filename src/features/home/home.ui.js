@@ -1,11 +1,13 @@
 import { TOOLS_CONFIG } from "../../core/config.js";
 import { homeTemplate } from "./home.template.js";
 import { Analytics } from "../../core/analytics.js";
+import { ReleaseNotes } from "../../core/releaseNotes.js";
 
 export class HomeUI {
   constructor(container) {
     this.container = container;
     this.analytics = new Analytics();
+    this.releaseNotes = new ReleaseNotes();
     this.init();
   }
 
@@ -14,20 +16,22 @@ export class HomeUI {
     this.setupEventListeners();
   }
 
-  render() {
-    const mostUsedTools = this.analytics.getMostUsedFeatures(4).filter((tool) => tool.name !== "home");
-    const recentTools = this.analytics.getRecentlyUsedFeatures(4).filter((tool) => tool.name !== "home");
+  async render() {
+    const mostUsedTools = this.analytics.getMostUsedFeatures(3).filter((tool) => tool.name !== "home");
+    const recentTools = this.analytics.getRecentlyUsedFeatures(3).filter((tool) => tool.name !== "home");
     const globalStats = this.analytics.getGlobalStats();
 
     // Filter recent tools to exclude those already in most used
     const mostUsedIds = new Set(mostUsedTools.map((t) => t.name));
     const filteredRecentTools = recentTools.filter((tool) => !mostUsedIds.has(tool.name));
+    const latestReleaseNotes = await this.releaseNotes.getLatestReleaseNotes();
 
     this.container.innerHTML = homeTemplate({
       mostUsedTools: this.enrichToolsData(mostUsedTools),
       recentTools: this.enrichToolsData(filteredRecentTools),
       allTools: this.getAllToolsSorted(),
       globalStats,
+      latestReleaseNotes: latestReleaseNotes,
     });
   }
 

@@ -1,16 +1,13 @@
-export function homeTemplate({ mostUsedTools, recentTools, allTools, globalStats }) {
+export function homeTemplate({ mostUsedTools, recentTools, allTools, globalStats, latestReleaseNotes }) {
   return `
         <div class="home-container">
-          <section class="stats-overview">
-            <div class="stats-card">
-              <h3>Total Uses</h3>
-              <div class="stat-value">${globalStats.totalUses}</div>
+          <div class="release-notes">
+            <div class="release-notes-header">
+              <h2>Release Notes</h2>
+              <button class="release-notes-button">View Past Release Notes</button>
             </div>
-            <div class="stats-card">
-              <h3>Total Visits</h3>
-              <div class="stat-value">${globalStats.totalVisits}</div>
-            </div>
-          </section>
+            <div class="release-notes-latest-content">${renderMarkdownContent(latestReleaseNotes)}</div>
+          </div>
     
           <div class="tools-grid">
             <section class="tools-section">
@@ -27,6 +24,17 @@ export function homeTemplate({ mostUsedTools, recentTools, allTools, globalStats
               </div>
             </section>
           </div>
+
+          <section class="stats-overview">
+            <div class="stats-card">
+              <h3>Total Uses</h3>
+              <div class="stat-value">${globalStats.totalUses}</div>
+            </div>
+            <div class="stats-card">
+              <h3>Total Visits</h3>
+              <div class="stat-value">${globalStats.totalVisits}</div>
+            </div>
+          </section>
     
           <section class="all-tools-section">
             <h2>All Tools</h2>
@@ -105,4 +113,23 @@ function formatDate(dateString) {
   if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
 
   return date.toLocaleDateString();
+}
+
+function renderMarkdownContent(markdown) {
+  if (!markdown) {
+    return '<p class="no-release-notes">No release notes available</p>';
+  }
+
+  try {
+    return `
+      <div class="tool-card">
+        <div class="markdown-content">
+          ${marked.parse(String(markdown))}
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error parsing markdown:", error);
+    return '<p class="no-release-notes">Error loading release notes</p>';
+  }
 }

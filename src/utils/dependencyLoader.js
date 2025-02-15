@@ -37,6 +37,9 @@ export class DependencyLoader {
         "https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify-css.min.js",
       ],
     },
+    marked: {
+      resources: ["https://cdn.jsdelivr.net/npm/marked/marked.min.js"],
+    },
   };
 
   static loaded = new Set();
