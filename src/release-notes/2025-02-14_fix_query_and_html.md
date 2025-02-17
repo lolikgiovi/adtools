@@ -1,13 +1,13 @@
-# Release Notes - February 14, 2025
+# Release Notes - February 17, 2025
 
-## Quick Query
+## [Quick Query](./quickQuery)
 
 - <b>Bug Fixed</b>: Fixed issue when query parameters not being properly escaped in MERGE Statements for some cases.
 - <b>New Feature</b>: Upload attachment files (Image, Text, PDF, JSON, HTML) and create query with it.
 - <b>New Feature</b>: Your latest Spreadsheet Data (Data Input Table) will be saved in Local Storage. When you open the schema, the data will also be loaded.
 - <b>Improvement</b>: Added support for abbreviations in schema and table names. For example, you can now type `wsb` and got `WEALTH_SECONDARY_BOND` as the result, or `wprod.cfg` to get `WEALTH_PRODUCT.CONFIG`.
 
-## HTML Template
+## [HTML Template](./html)
 
 - <b>Bug Fixed</b>: Now can render HTML Templates smoothly.
 - <b>New Feature</b>: Base URL Management - Populate your Base URLs and load the HTML with it, saved in Local Storage.
