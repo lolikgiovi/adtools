@@ -59,12 +59,12 @@ export class ValueProcessorService {
     switch (fieldDataType.type) {
       case "NUMBER":
         // NUMBER(1,0) / boolean number
-        if (fieldDataType.precision === 1 && fieldDataType.scale === 0) {
-          if (value !== "0" && value !== "1" && value !== 0 && value !== 1) {
-            throw new Error(`Invalid boolean value "${value}" for field "${fieldName}". Only 0 or 1 are allowed.`);
-          }
-          return value;
-        }
+        // if (fieldDataType.precision === 1 && fieldDataType.scale === 0) {
+        //   if (value !== "0" && value !== "1" && value !== 0 && value !== 1) {
+        //     throw new Error(`Invalid boolean value "${value}" for field "${fieldName}". Only 0 or 1 are allowed.`);
+        //   }
+        //   return value;
+        // }
 
         // Convert comma to dot if present
         const normalizedValue = value.toString().replace(",", ".");
