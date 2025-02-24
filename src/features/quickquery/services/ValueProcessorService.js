@@ -35,24 +35,24 @@ export class ValueProcessorService {
     // Handle special ID fields
     const upperDataType = dataType.toUpperCase();
 
-    // Config ID with NUMBER type, OR field ends with _id BUT NOT rule_id
+    // Increment value (max + 1)
     if (
-      (fieldName === "config_id" && upperDataType === "NUMBER" && fieldName !== "rule_id") ||
-      (fieldName.endsWith("_id") && value.toLowerCase().includes("max"))
+      (fieldName === "config_id" && upperDataType === "NUMBER") || // specific for config_id
+      (upperDataType.startsWith("NUMBER") && value.toLowerCase() === "max") // any number fields with exactly max value
     ) {
       return `(SELECT MAX(${fieldName})+1 FROM ${tableName})`;
     }
 
-    // Config ID with VARCHAR type
-    if (fieldName === "config_id" && upperDataType.startsWith("VARCHAR")) {
-      if (value.toLowerCase() === "uuid" || !this.isValidUUID(value)) {
+    // Varchar containing UUID
+    if (upperDataType.startsWith("VARCHAR") && value.toLowerCase() === "uuid") {
+      if (!this.isValidUUID(value)) {
         return `'${crypto.randomUUID()}'`;
       }
       return `'${value}'`;
     }
 
     // System config ID
-    if (fieldName === "system_config_id") {
+    if (fieldName === "system_config_id" && value.toLowerCase() === "max") {
       return `(SELECT MAX(CAST(${fieldName} AS INT))+1 FROM ${tableName})`;
     }
 
