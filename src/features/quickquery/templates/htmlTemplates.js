@@ -51,7 +51,8 @@ export const MAIN_TEMPLATE = `<div class="tool-container quick-query-tool-contai
                     <button id="addDataRow">Add Row</button>
                     <button id="removeDataRow">Remove Last Row</button>
                     <button id="clearData">Clear Data</button>
-                </div>
+                    </div>
+                <p class="tip-text"><i class="tip-icon">💡</i> Tip: Enter 'max' for _id fields to enable auto-increment functionality</p>
             </div>
             <div id="spreadsheet-data"></div>
         </div>

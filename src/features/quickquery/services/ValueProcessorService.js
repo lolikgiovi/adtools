@@ -36,7 +36,10 @@ export class ValueProcessorService {
     const upperDataType = dataType.toUpperCase();
 
     // Config ID with NUMBER type, OR field ends with _id BUT NOT rule_id
-    if ((fieldName === "config_id" || fieldName.endsWith("_id")) && upperDataType === "NUMBER" && fieldName !== "rule_id") {
+    if (
+      (fieldName === "config_id" && upperDataType === "NUMBER" && fieldName !== "rule_id") ||
+      (fieldName.endsWith("_id") && value.toLowerCase().includes("max"))
+    ) {
       return `(SELECT MAX(${fieldName})+1 FROM ${tableName})`;
     }
 
