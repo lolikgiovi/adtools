@@ -109,9 +109,10 @@ export class ValueProcessorService {
 
       case "DATE":
       case "TIMESTAMP":
-        if (!this.isValidDate(value)) {
-          throw new Error(`Invalid date value "${value}" for field "${fieldName}"`);
-        }
+        // skip validation, run right through formatTimeStamp
+        // if (!this.isValidDate(value)) {
+        //   throw new Error(`Invalid date value "${value}" for field "${fieldName}"`);
+        // }
         return this.formatTimestamp(value);
 
       case "CLOB":
