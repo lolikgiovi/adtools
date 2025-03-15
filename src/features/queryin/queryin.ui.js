@@ -12,6 +12,7 @@ export class QueryInUI {
     this.bindElements();
     this.setupEventListeners();
     this.loadDependencies();
+    this.loadSavedValues();
   }
 
   initializeUi() {
@@ -70,6 +71,7 @@ export class QueryInUI {
     );
     this.outputQueryEditor.setValue(query);
     this.outputQueryEditor.refresh();
+    this.saveValues();
   }
 
   handleClear() {
@@ -78,6 +80,7 @@ export class QueryInUI {
     this.elements.tableName.value = "";
     this.elements.schemaName.value = "";
     this.updateCodeMirror();
+    this.saveValues();
   }
 
   handleClearResult() {
@@ -107,5 +110,30 @@ export class QueryInUI {
       });
       input.dispatchEvent(new Event("input"));
     });
+  }
+
+  saveValues() {
+    const values = {
+      inputValues: this.elements.inputValues.value,
+      schemaName: this.elements.schemaName.value,
+      tableName: this.elements.tableName.value,
+      fieldName: this.elements.fieldName.value,
+    };
+    localStorage.setItem("query_in_last_value", JSON.stringify(values));
+  }
+
+  loadSavedValues() {
+    try {
+      const savedValues = localStorage.getItem("query_in_last_value");
+      if (savedValues) {
+        const values = JSON.parse(savedValues);
+        this.elements.inputValues.value = values.inputValues || "";
+        this.elements.schemaName.value = values.schemaName || "";
+        this.elements.tableName.value = values.tableName || "";
+        this.elements.fieldName.value = values.fieldName || "";
+      }
+    } catch (error) {
+      console.error("Error loading saved values:", error);
+    }
   }
 }

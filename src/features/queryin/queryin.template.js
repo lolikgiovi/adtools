@@ -1,22 +1,19 @@
 export const queryInTemplate = `
     <div class="tool-container">
       <h3 id="sectionText">Values</h3>
-      <textarea id="inputValues" placeholder="Enter values of the field, one per line">notification_template_id_1
-notification_template_id_2
-notification_template_id_3
-notification_template_id_4</textarea>
+      <textarea id="inputValues" placeholder="Enter values of the field, one per line"></textarea>
       <div class="button-group">
         <div class="input-group">
           <label for="schemaName">Schema Name</label>
-          <input type="text" id="schemaName" placeholder="Schema Name" value="notification">
+          <input type="text" id="schemaName" placeholder="Schema Name" value="">
         </div>
         <div class="input-group">
           <label for="tableName">Table Name</label>
-          <input type="text" id="tableName" placeholder="Table Name" value="notification_template">
+          <input type="text" id="tableName" placeholder="Table Name" value="">
         </div>
         <div class="input-group">
           <label for="fieldName">Field Name</label>
-          <input type="text" id="fieldName" placeholder="Field Name" value="notification_template_id">
+          <input type="text" id="fieldName" placeholder="Field Name" value="">
         </div>
       </div>
       <div class="button-group">
