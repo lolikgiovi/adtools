@@ -10,11 +10,14 @@ export class HtmlUI {
     this.htmlService = new HtmlService();
     this.baseUrlService = new BaseUrlService();
     this.editor = null;
+    this.isInitializing = true; // Add flag to prevent early saves
     this.initializeUi();
     this.initializeEditor();
     this.bindElements();
     this.setupEventListeners();
     this.updateBaseUrlSelect();
+    this.loadSavedData();
+    this.isInitializing = false; // Reset flag after initialization
   }
 
   initializeUi() {
@@ -35,6 +38,11 @@ export class HtmlUI {
       tabSize: 2,
       indentWithTabs: false,
       extraKeys: { "Ctrl-Space": "autocomplete" },
+    });
+
+    // Add change listener to save content
+    this.editor.on("change", () => {
+      this.saveData();
     });
   }
 
@@ -94,11 +102,17 @@ export class HtmlUI {
     this.elements.minifyButton.addEventListener("click", () => this.minifyHTML());
     this.elements.copyButton.addEventListener("click", () => copyToClipboard(this.editor.getValue(), this.elements.copyButton));
     this.elements.pasteButton.addEventListener("click", () => this.handlePaste());
-    this.elements.clearButton.addEventListener("click", () => this.editor.setValue(""));
+    this.elements.clearButton.addEventListener("click", () => {
+      this.editor.setValue("");
+      this.saveData();
+    });
     this.elements.loadImagesButton?.addEventListener("click", () => this.loadImages());
     this.elements.toggleWrapButton.addEventListener("click", () => this.toggleWordWrap());
     this.elements.toggleHighlightButton.addEventListener("click", () => this.toggleSyntaxHighlight());
-    this.elements.baseUrlSelect?.addEventListener("change", () => this.updatePreview());
+    this.elements.baseUrlSelect?.addEventListener("change", () => {
+      this.updatePreview();
+      this.saveData();
+    });
     this.elements.dynamicFieldsContainer.addEventListener("input", () => this.updatePreview());
 
     this.elements.manageBaseUrls.addEventListener("click", () => this.showUrlManagement());
@@ -125,11 +139,13 @@ export class HtmlUI {
   formatHTML() {
     const formatted = this.htmlService.formatHTML(this.editor.getValue());
     this.editor.setValue(formatted);
+    this.saveData();
   }
 
   minifyHTML() {
     const minified = this.htmlService.minifyHTML(this.editor.getValue());
     this.editor.setValue(minified);
+    this.saveData();
   }
 
   handleFileSelect(event) {
@@ -139,6 +155,7 @@ export class HtmlUI {
     const reader = new FileReader();
     reader.onload = (e) => {
       this.editor.setValue(e.target.result);
+      this.saveData();
     };
     reader.onerror = (e) => {
       console.error("Error reading file:", e);
@@ -268,6 +285,7 @@ export class HtmlUI {
     try {
       const text = await navigator.clipboard.readText();
       this.editor.setValue(text);
+      this.saveData();
     } catch (err) {
       console.error("Failed to read clipboard contents: ", err);
     }
@@ -333,6 +351,11 @@ export class HtmlUI {
     if (urls.some((item) => item.url === currentValue)) {
       select.value = currentValue;
     }
+
+    // Only save if not in initialization phase
+    if (!this.isInitializing) {
+      this.saveData();
+    }
   }
 
   handleAddBaseUrl() {
@@ -352,6 +375,50 @@ export class HtmlUI {
       this.baseUrlService.clearUrls();
       this.updateBaseUrlsList();
       this.updateBaseUrlSelect();
+    }
+  }
+
+  // New methods for localStorage functionality
+  saveData() {
+    // Skip saving during initialization
+    if (this.isInitializing) return;
+
+    try {
+      const data = {
+        editorContent: this.editor.getValue(),
+        baseUrl: this.elements.baseUrlSelect.value,
+      };
+      localStorage.setItem("html_last_data", JSON.stringify(data));
+    } catch (error) {
+      console.error("Error saving HTML editor data:", error);
+    }
+  }
+
+  loadSavedData() {
+    try {
+      const savedData = localStorage.getItem("html_last_data");
+      if (savedData) {
+        const data = JSON.parse(savedData);
+
+        // Set editor content if available
+        if (data.editorContent) {
+          this.editor.setValue(data.editorContent);
+        }
+
+        // Set baseUrl if available and valid
+        if (data.baseUrl && this.elements.baseUrlSelect) {
+          // Check if the option exists before setting
+          const options = Array.from(this.elements.baseUrlSelect.options);
+          if (options.some((option) => option.value === data.baseUrl)) {
+            this.elements.baseUrlSelect.value = data.baseUrl;
+          }
+        }
+
+        // Update preview after loading saved data
+        this.updatePreview();
+      }
+    } catch (error) {
+      console.error("Error loading saved HTML data:", error);
     }
   }
 }
