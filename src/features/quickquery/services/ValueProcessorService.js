@@ -14,9 +14,10 @@ export class ValueProcessorService {
 
     // Handle audit fields
     if (AUDIT_FIELDS.time.includes(fieldName)) {
-      const hasNoValue = !value;
-      const hasNoTimestampCharacters = !/[-/]/.test(value);
-      return hasNoValue || hasNoTimestampCharacters ? "SYSDATE" : this.formatTimestamp(value);
+      // const hasNoValue = !value;
+      // const hasNoTimestampCharacters = !/[-/]/.test(value);
+      // return hasNoValue || hasNoTimestampCharacters ? "SYSDATE" : this.formatTimestamp(value);
+      return "SYSDATE"; // for data integrity, return sysdate to log the time of the query
     }
 
     if (AUDIT_FIELDS.by.includes(fieldName)) {

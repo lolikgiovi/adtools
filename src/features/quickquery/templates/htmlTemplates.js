@@ -21,8 +21,7 @@ export const MAIN_TEMPLATE = `<div class="tool-container quick-query-tool-contai
                 <div id="spreadsheet-schema"></div>
 
                 <div id="attachments-container" class="attachment-container-hide">
-                    <p>Drag and drop attachments here or click to select. Supports: txt, jpg, png ,
-                        html, pdf and json</p>
+                    <p>Drop attachments or click to select. Supports: txt, jpg, png, html, pdf and json</p>
                     <input type="file" id="attachmentsInput" accept=".txt, .jpg, .jpeg, .png , .html, .pdf, .json"
                         multiple style="display: none;" />
                 </div>
@@ -44,14 +43,10 @@ export const MAIN_TEMPLATE = `<div class="tool-container quick-query-tool-contai
         </div>
         <div class="content-b">
             <div class="button-group">
-                <h3>Data Input</h3>
-                <p>Note: First row of data must be field names.</p>
-                <div class="simulate-buttons">
-                    <button id="addFieldNames">Add field names from schema</button>
-                    <button id="addDataRow">Add Row</button>
-                    <button id="removeDataRow">Remove Last Row</button>
-                    <button id="clearData">Clear Data</button>
-                    </div>
+                <button id="addFieldNames">Add field names from schema</button>
+                <button id="addDataRow">Add Row</button>
+                <button id="removeDataRow">Remove Last Row</button>
+                <button id="clearData">Clear Data</button>
                 <p class="tip-text"><i class="tip-icon">💡</i> Tip: Enter 'max' for _id fields to enable auto-increment functionality</p>
             </div>
             <div id="spreadsheet-data"></div>
