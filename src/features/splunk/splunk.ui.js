@@ -42,13 +42,17 @@ export class SplunkUI {
   initializeEditor() {
     this.splunkService.defineSplunkMode(CodeMirror);
 
+    const savedContent = this.loadSavedContent();
+
     this.editor = CodeMirror(document.getElementById("splunkEditor"), {
       mode: "splunk",
       lineNumbers: true,
       theme: "default",
       lineWrapping: true,
       styleSelectedText: true,
-      value: `eventType=[EVENT_NAME]|
+      value:
+        savedContent ||
+        `eventType=[EVENT_NAME]|
 description=|
 channelCode=EVE|
 channelName=EVE|
@@ -56,6 +60,11 @@ cifNo= $!{context.cifNo}|
 mobilePhone= $!{context.mobilePhone}|
 amount=$!{context.amount}|
 transactionDate=$!{date.convertDate($!{context.transactionDate},'yyyy-MM-dd HH:mm:ss')}`,
+    });
+
+    // Save content when editor changes
+    this.editor.on("change", () => {
+      this.saveContent();
     });
   }
 
@@ -102,6 +111,24 @@ transactionDate=$!{date.convertDate($!{context.transactionDate},'yyyy-MM-dd HH:m
       this.editor.setValue(text);
     } catch (err) {
       console.error("Failed to read clipboard contents: ", err);
+    }
+  }
+
+  saveContent() {
+    try {
+      const content = this.editor.getValue();
+      localStorage.setItem("splunk_last_value", content);
+    } catch (error) {
+      console.error("Error saving editor content:", error);
+    }
+  }
+
+  loadSavedContent() {
+    try {
+      return localStorage.getItem("splunk_last_value");
+    } catch (error) {
+      console.error("Error loading saved content:", error);
+      return null;
     }
   }
 }
