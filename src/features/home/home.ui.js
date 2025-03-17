@@ -36,11 +36,13 @@ export class HomeUI {
   }
 
   enrichToolsData(tools) {
-    return tools.map((tool) => ({
-      ...tool,
-      config: TOOLS_CONFIG[tool.name],
-      stats: this.analytics.getFeatureStats(tool.name),
-    }));
+    return tools
+      .filter((tool) => TOOLS_CONFIG[tool.name]) // Only include tools that have a corresponding config
+      .map((tool) => ({
+        ...tool,
+        config: TOOLS_CONFIG[tool.name],
+        stats: this.analytics.getFeatureStats(tool.name),
+      }));
   }
 
   getAllToolsSorted() {
