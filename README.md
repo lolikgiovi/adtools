@@ -4,6 +4,8 @@ AD Tools is a comprehensive suite of utilities designed to simplify and streamli
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lolikgiovi/adtools)
 
+New line to test CI/CD Pipeline
+
 ## Features
 
 ### 1. UUID Generator
