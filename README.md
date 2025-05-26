@@ -2,6 +2,8 @@
 
 AD Tools is a comprehensive suite of utilities designed to simplify and streamline various tasks related to Active Directory management and integration. This project provides a collection of powerful tools to enhance productivity and efficiency in handling AD-related operations.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lolikgiovi/adtools)
+
 ## Features
 
 ### 1. UUID Generator
