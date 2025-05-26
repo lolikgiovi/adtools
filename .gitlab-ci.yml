@@ -6,16 +6,11 @@ sync_to_github:
   only:
     - main
   script:
-    # Set Git identity for pushing
     - git config --global user.name "GitLab CI"
     - git config --global user.email "ci@gitlab.com"
-
-    # Clone the GitLab repo (your current project)
-    - git clone https://gitlab.com/lolikgiovi/ad-tools.git
-    - cd ad-tools
 
     # Add GitHub as a remote
     - git remote add github https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/lolikgiovi/adtools.git
 
-    # Push only main branch to GitHub
+    # Push main to GitHub
     - git push github main --force
