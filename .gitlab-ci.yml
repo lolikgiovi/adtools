@@ -9,8 +9,11 @@ sync_to_github:
     - git config --global user.name "GitLab CI"
     - git config --global user.email "ci@gitlab.com"
 
-    # Add GitHub as a remote
+    # Add GitHub remote
     - git remote add github https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/lolikgiovi/adtools.git
 
-    # Push main to GitHub
+    # Create a local branch that points to the current commit
+    - git checkout -b main
+
+    # Force push to GitHub main
     - git push github main --force
