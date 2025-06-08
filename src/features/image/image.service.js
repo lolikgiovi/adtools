@@ -40,7 +40,11 @@ export class ImageService {
     for (let i = 0; i < images.length; i++) {
       const response = await fetch(images[i].src);
       const blob = await response.blob();
-      zip.file(`image_${i + 1}.png`, blob);
+      const originalFilename = images[i].name || `image_${i + 1}`; //file name, or fallback to image_1, image_2, etc.
+      const extension = originalFilename.match(/\.[^\.]+$/) ? originalFilename.match(/\.[^\.]+$/)[0] : '.png';
+      const imageFilename = originalFilename.replace(/\.[^\.]+$/, '') + extension;
+      
+      zip.file(imageFilename, blob);
     }
     return zip.generateAsync({ type: "blob" });
   }
@@ -51,7 +55,10 @@ export class ImageService {
       const response = await fetch(images[i].src);
       const blob = await response.blob();
       const base64WithPrefix = await this.imageToBase64(blob);
-      zip.file(`image_${i + 1}.txt`, base64WithPrefix);
+      const originalFilename = images[i].name || `image_${i + 1}`; //image name, or fallback to image_1, image_2, etc.
+      const txtFilename = originalFilename.replace(/\.[^\.]+$/, '.txt');
+      
+      zip.file(txtFilename, base64WithPrefix);
     }
     return zip.generateAsync({ type: "blob" });
   }
