@@ -61,4 +61,10 @@ export const TOOLS_CONFIG = {
     description: "Quick SQL query generator",
     order: 8,
   },
+  imageChecker: {
+    init: "initImageChecker",
+    title: "Image Checker",
+    description: "Check image existence and metadata",
+    order: 9,
+  },
 };
