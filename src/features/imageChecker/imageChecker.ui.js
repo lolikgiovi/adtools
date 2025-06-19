@@ -26,15 +26,25 @@ export class ImageCheckerUI {
   }
 
   setupEventListeners() {
-    this.elements.checkImageButton.addEventListener("click", () => this.checkImages());
-    this.elements.clearButton.addEventListener("click", () => this.clearResults());
+    this.elements.checkImageButton.addEventListener("click", () => {
+      this.checkImages();
+      this.saveValues();
+    });
+    this.elements.clearButton.addEventListener("click", () => {
+      this.clearResults();
+      this.clearSavedValues();
+    });
 
     // Batch mode enter key handler
     this.elements.batchImagePathsInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter" && e.ctrlKey) {
         this.checkImages();
+        this.saveValues();
       }
     });
+
+    // Load saved values
+    this.loadSavedValues();
   }
 
   async checkImages() {
@@ -305,5 +315,28 @@ export class ImageCheckerUI {
 
   clearResults() {
     this.elements.resultsContainer.innerHTML = "";
+  }
+
+  saveValues() {
+    const values = {
+      batchImagePaths: this.elements.batchImagePathsInput.value,
+    };
+    localStorage.setItem("image_checker_last_value", JSON.stringify(values));
+  }
+
+  loadSavedValues() {
+    try {
+      const savedValues = localStorage.getItem("image_checker_last_value");
+      if (savedValues) {
+        const values = JSON.parse(savedValues);
+        this.elements.batchImagePathsInput.value = values.batchImagePaths || "";
+      }
+    } catch (error) {
+      console.error("Error loading saved values:", error);
+    }
+  }
+
+  clearSavedValues() {
+    localStorage.removeItem("image_checker_last_value");
   }
 }
