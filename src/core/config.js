@@ -43,28 +43,28 @@ export const TOOLS_CONFIG = {
     description: "Edit HTML templates",
     order: 5,
   },
+  imageChecker: {
+    init: "initImageChecker",
+    title: "Image Checker",
+    description: "Check image existence and metadata",
+    order: 6,
+  },
   screenshot: {
     init: "initScreenshotTemplate",
     title: "Deploy Docs",
     description: "Create deployment documentation",
-    order: 6,
+    order: 7,
   },
   querify: {
     init: "initQuerify",
     title: "Querify",
     description: "SQL query from Excel Files",
-    order: 7,
+    order: 8,
   },
   quickQuery: {
     init: "initQuickQuery",
     title: "Quick Query",
     description: "Quick SQL query generator",
-    order: 8,
-  },
-  imageChecker: {
-    init: "initImageChecker",
-    title: "Image Checker",
-    description: "Check image existence and metadata",
     order: 9,
   },
 };

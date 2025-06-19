@@ -3,7 +3,7 @@ export class ReleaseNotes {
 
   async getLatestReleaseNotes() {
     try {
-      const response = await fetch("/src/release-notes/2025-02-14_fix_query_and_html.md");
+      const response = await fetch("/src/release-notes/2025-06-19_add_image_checker.md");
       const releaseNotes = await response.text();
 
       return releaseNotes;
