@@ -162,7 +162,7 @@ export class QueryGenerationService {
   }
 
   formatFieldName(fieldName) {
-    return oracleReservedWords.has(fieldName.toLowerCase()) ? `"${fieldName.toUpperCase()}"` : fieldName;
+    return oracleReservedWords.has(fieldName.toLowerCase()) ? `"${fieldName.toLowerCase()}"` : fieldName;
   }
 
   getMaxLength(dataType) {
