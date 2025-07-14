@@ -195,6 +195,10 @@
   margin-bottom: 10px;
 }
 
+#warningMessages {
+  margin-bottom: 10px;
+}
+
 /* #addFieldNames {
   padding: 0;
   margin: 0;

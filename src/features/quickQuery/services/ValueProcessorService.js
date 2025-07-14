@@ -3,7 +3,7 @@ import { commonDateFormats } from "../constants/Constants.js";
 export class ValueProcessorService {
   constructor() {}
 
-  processValue(value, dataType, nullable, fieldName, tableName) {
+  processValue(value, dataType, nullable, fieldName, tableName, queryType = null) {
     console.log("Processing value:", value);
 
     // Constants
@@ -21,12 +21,28 @@ export class ValueProcessorService {
     }
 
     if (AUDIT_FIELDS.by.includes(fieldName)) {
-      return value?.trim() ? `'${value.replace(/'/g, "''")}'` : "'SYSTEM'";
+      return value?.trim() ? `'${value.replace(/'/g, "''").toUpperCase()}'` : "'SYSTEM'";
     }
 
     // Handle NULL values
-    const isNullValue = value === null || value === undefined || value === "" || value?.toLowerCase() === "null";
-    if (isNullValue) {
+    const isEmptyValue = value === null || value === undefined || value === "";
+    const isExplicitNull = value?.toLowerCase() === "null";
+    
+    if (isEmptyValue) {
+      // For UPDATE operations, skip empty values (don't update these fields)
+      if (queryType === "update") {
+        return null;
+      }
+      // For other operations, validate nullable constraint
+      if (nullable?.toLowerCase() !== "yes") {
+        throw new Error(`NULL value not allowed for non-nullable field "${fieldName}"`);
+      }
+      return "NULL";
+    }
+    
+    // Handle explicit NULL string values
+    if (isExplicitNull) {
+      // Always validate nullable constraint for explicit NULL values
       if (nullable?.toLowerCase() !== "yes") {
         throw new Error(`NULL value not allowed for non-nullable field "${fieldName}"`);
       }
