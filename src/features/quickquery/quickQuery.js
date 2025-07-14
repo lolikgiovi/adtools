@@ -352,6 +352,14 @@ export class QuickQueryUI {
     }
   }
 
+  showWarning(message) {
+    if (this.elements.warningMessages) {
+      this.elements.warningMessages.innerHTML = message;
+      this.elements.warningMessages.style.display = "block";
+      this.elements.warningMessages.style.color = "orange";
+    }
+  }
+
   clearError() {
     if (this.elements.errorMessages && this.elements.warningMessages) {
       this.elements.errorMessages.textContent = "";
@@ -386,12 +394,21 @@ export class QuickQueryUI {
       this.schemaValidationService.validateSchema(schemaData);
       this.schemaValidationService.matchSchemaWithData(schemaData, inputData);
 
+      
+
       this.localStorageService.saveSchema(tableName, schemaData, inputData);
 
       const query = this.queryGenerationService.generateQuery(tableName, queryType, schemaData, inputData, this.processedFiles);
 
       this.editor.setValue(query);
       this.clearError();
+
+      // Check for duplicate primary keys for MERGE and UPDATE operations
+      const duplicateResult = this.queryGenerationService.detectDuplicatePrimaryKeys(schemaData, inputData, tableName);
+      if (duplicateResult.hasDuplicates && duplicateResult.warningMessage) {
+        this.showWarning(duplicateResult.warningMessage);
+        console.log("Detected duplicate result");
+      }
     } catch (error) {
       this.showError(error.message);
       this.editor.setValue("");

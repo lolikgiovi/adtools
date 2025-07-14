@@ -8,6 +8,100 @@ export class QueryGenerationService {
     this.attachmentValidationService = new AttachmentValidationService();
   }
 
+  detectDuplicatePrimaryKeys(schemaData, inputData, tableName) {
+    // 1. Get primary keys
+    const primaryKeys = this.ValueProcessorService.findPrimaryKeys(schemaData, tableName);
+    if (primaryKeys.length === 0) {
+      return { hasDuplicates: false, duplicates: [], warningMessage: null };
+    }
+
+    // 2. Get field names from first row of input data
+    const fieldNames = inputData[0].map((name) => name.toLowerCase());
+    
+    // 3. Get data rows (excluding header row)
+    const dataRows = inputData.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== ""));
+    
+    // 4. Find indices of primary key columns
+    const pkIndices = primaryKeys.map(pk => {
+      const index = fieldNames.indexOf(pk.toLowerCase());
+      if (index === -1) {
+        throw new Error(`Primary key field '${pk}' not found in data columns`);
+      }
+      return { field: pk, index };
+    });
+
+    // 5. Track primary key combinations and their row numbers
+    const pkCombinations = new Map();
+    const duplicates = [];
+
+    dataRows.forEach((row, rowIndex) => {
+      // Extract primary key values for this row
+      const pkValues = pkIndices.map(({ field, index }) => {
+        const value = row[index];
+        // Normalize null/empty values
+        return value === null || value === undefined || value === "" ? "NULL" : String(value).trim();
+      });
+
+      // Skip rows where any primary key value is null/empty
+      if (pkValues.some(val => val === "NULL")) {
+        return;
+      }
+
+      // Create a unique key from primary key combination
+      const pkKey = pkValues.join("|");
+      const actualRowNumber = rowIndex + 2; // +2 because we skip header row and use 1-based indexing
+
+      if (pkCombinations.has(pkKey)) {
+        // Found duplicate - add to existing entry
+        const existing = pkCombinations.get(pkKey);
+        existing.rows.push(actualRowNumber);
+        
+        // Add to duplicates array if this is the first time we detect this duplicate
+        if (existing.rows.length === 2) {
+          duplicates.push({
+            pkValues: pkValues,
+            pkFields: primaryKeys,
+            rows: [...existing.rows]
+          });
+        } else {
+          // Update existing duplicate entry
+          const duplicateEntry = duplicates.find(d => d.pkValues.join("|") === pkKey);
+          if (duplicateEntry) {
+            duplicateEntry.rows = [...existing.rows];
+          }
+        }
+      } else {
+        // First occurrence of this primary key combination
+        pkCombinations.set(pkKey, {
+          pkValues: pkValues,
+          rows: [actualRowNumber]
+        });
+      }
+    });
+
+    // Generate warning message if duplicates found
+    let warningMessage = null;
+    if (duplicates.length > 0) {
+      const warningMessages = duplicates.map(duplicate => {
+        const pkDescription = duplicate.pkFields.length === 1 
+          ? `Primary key '${duplicate.pkFields[0]}'` 
+          : `Primary key combination (${duplicate.pkFields.join(", ")})`;
+        const valueDescription = duplicate.pkValues.length === 1
+          ? `value '${duplicate.pkValues[0]}'`
+          : `values (${duplicate.pkValues.join(", ")})`;
+        return `${pkDescription} with ${valueDescription} appears multiple times on rows: ${duplicate.rows.join(", ")}<br>`;
+      }).join("\n");
+      
+      warningMessage = `Warning: Duplicate primary keys detected:<br>${warningMessages}This may cause unexpected behavior.`;
+    }
+
+    return {
+      hasDuplicates: duplicates.length > 0,
+      duplicates: duplicates,
+      warningMessage: warningMessage
+    };
+  }
+
   generateQuery(tableName, queryType, schemaData, inputData, attachments) {
     // 1. Get field names from first row of input data
     const fieldNames = inputData[0].map((name) => name.toLowerCase());
@@ -47,7 +141,7 @@ export class QueryGenerationService {
           // Return formatted object
           return {
             fieldName,
-            formattedValue: this.ValueProcessorService.processValue(value, dataType, nullable, fieldName, tableName),
+            formattedValue: this.ValueProcessorService.processValue(value, dataType, nullable, fieldName, tableName, queryType),
           };
         });
       } catch (error) {
@@ -69,6 +163,9 @@ export class QueryGenerationService {
         query += this.generateInsertStatement(tableName, processedFields);
         query += "\n\n";
       });
+    } else if (queryType === "update") {
+      query += this.generateUpdateStatement(tableName, processedRows, primaryKeys);
+      query += "\n\n";
     } else {
       processedRows.forEach((processedFields) => {
         query += this.generateMergeStatement(tableName, processedFields, primaryKeys);
@@ -123,6 +220,97 @@ export class QueryGenerationService {
     return mergeStatement;
   }
 
+  generateUpdateStatement(tableName, processedRows, primaryKeys) {
+    const primaryKeysLowerCase = primaryKeys.map((pk) => pk.toLowerCase());
+    
+    // Collect all unique fields being updated across all rows (table scope)
+    const allUpdatedFields = new Set();
+    const pkValueMap = new Map(primaryKeysLowerCase.map((pk) => [pk, new Set()]));
+    
+    // Process each row to collect updated fields and primary key values
+    processedRows.forEach((row) => {
+      row.forEach((field) => {
+        // Collect primary key values for WHERE clause
+        if (primaryKeysLowerCase.includes(field.fieldName)) {
+          if (field.formattedValue && field.formattedValue !== "NULL" && field.formattedValue !== null) {
+            pkValueMap.get(field.fieldName).add(field.formattedValue);
+          }
+        }
+        // Collect non-primary key fields that are being updated (excluding audit fields)
+        else if (!primaryKeysLowerCase.includes(field.fieldName) && 
+                 !["created_time", "created_by", "updated_time", "updated_by"].includes(field.fieldName) &&
+                 field.formattedValue !== null && field.formattedValue !== undefined) {
+          allUpdatedFields.add(field.fieldName);
+        }
+      });
+    });
+
+    // Validate that we have primary key values
+    const hasValidPkValues = Array.from(pkValueMap.values()).some(valueSet => valueSet.size > 0);
+    if (!hasValidPkValues) {
+      throw new Error("Primary key values are required for UPDATE operation.");
+    }
+
+    // Validate that we have fields to update
+    if (allUpdatedFields.size === 0) {
+      throw new Error("No fields to update. Please provide at least one non-primary-key field with a value.");
+    }
+
+    // Add audit fields separately after processing all rows
+    allUpdatedFields.add("updated_time");
+    allUpdatedFields.add("updated_by");
+
+    // Build UPDATE SET clause for each row
+    const updateStatements = [];
+    processedRows.forEach((row) => {
+      const updateFields = row
+        .filter((f) => {
+          if (primaryKeysLowerCase.includes(f.fieldName)) return false;
+          if (["created_time", "created_by"].includes(f.fieldName)) return false;
+          if (f.formattedValue === null) return false;
+          return f.formattedValue !== undefined;
+        })
+        .map((f) => `  ${this.formatFieldName(f.fieldName)} = ${f.formattedValue}`);
+      
+      if (updateFields.length > 0) {
+        const pkConditions = primaryKeysLowerCase
+          .map((pk) => {
+            const pkField = row.find(f => f.fieldName === pk);
+            if (!pkField || pkField.formattedValue === null || pkField.formattedValue === "NULL" || !pkField.formattedValue) {
+              throw new Error(`Primary key '${pk}' in row ${processedRows.indexOf(row) + 2} must have a value for UPDATE operation.`);
+            }
+            return `${this.formatFieldName(pk)} = ${pkField.formattedValue}`;
+          })
+          .join(" AND ");
+        
+        updateStatements.push(`UPDATE ${tableName}\nSET\n${updateFields.join(",\n")}\nWHERE ${pkConditions};`);
+      }
+    });
+
+    // Create field list for SELECT statements (table scope)
+    const selectFieldNames = Array.from(allUpdatedFields).map(f => this.formatFieldName(f));
+    
+    // Build WHERE clause for SELECT statements using IN clauses like generateSelectStatement
+    const whereConditions = [];
+    pkValueMap.forEach((values, pkName) => {
+      if (values.size > 0) {
+        whereConditions.push(`${this.formatFieldName(pkName)} IN (${Array.from(values).join(", ")})`);
+      }
+    });
+    const allPkConditions = whereConditions.join(" AND ");
+
+    // Generate the 3-part UPDATE statement
+    let updateStatement = "-- Selected fields before update\n";
+    updateStatement += `SELECT ${selectFieldNames.join(", ")}\nFROM ${tableName} WHERE ${allPkConditions};\n\n`;
+    
+    updateStatement += updateStatements.join("\n\n") + "\n\n";
+    
+    updateStatement += "-- Selected fields after update\n";
+    updateStatement += `SELECT ${selectFieldNames.join(", ")}\nFROM ${tableName} WHERE ${allPkConditions};`;
+
+    return updateStatement;
+  }
+
   generateSelectStatement(tableName, primaryKeys, processedRows) {
     if (primaryKeys.length === 0) return null;
     if (processedRows.length === 0) return null;
@@ -154,7 +342,8 @@ export class QueryGenerationService {
     // If no valid PK values found, return null
     if (whereConditions.length === 0) return null;
 
-    let selectStatement = `\nSELECT * FROM ${tableName} WHERE ${whereConditions.join(" AND ")} ORDER BY created_time ASC;`;
+    const orderByClause = processedRows.length > 1 ? " ORDER BY updated_time ASC" : "";
+    let selectStatement = `\nSELECT * FROM ${tableName} WHERE ${whereConditions.join(" AND ")}${orderByClause};`;
     selectStatement += `\nSELECT ${primaryKeys
       .map((pk) => pk.toLowerCase())
       .join(", ")}, updated_time FROM ${tableName} WHERE updated_time >= SYSDATE - INTERVAL '5' MINUTE;`;
