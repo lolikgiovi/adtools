@@ -17,12 +17,12 @@ export class QueryGenerationService {
 
     // 2. Get field names from first row of input data
     const fieldNames = inputData[0].map((name) => name.toLowerCase());
-    
+
     // 3. Get data rows (excluding header row)
     const dataRows = inputData.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== ""));
-    
+
     // 4. Find indices of primary key columns
-    const pkIndices = primaryKeys.map(pk => {
+    const pkIndices = primaryKeys.map((pk) => {
       const index = fieldNames.indexOf(pk.toLowerCase());
       if (index === -1) {
         throw new Error(`Primary key field '${pk}' not found in data columns`);
@@ -43,8 +43,18 @@ export class QueryGenerationService {
       });
 
       // Skip rows where any primary key value is null/empty
-      if (pkValues.some(val => val === "NULL")) {
+      if (pkValues.some((val) => val === "NULL")) {
         return;
+      }
+
+      // Filter out rows containing "uuid" or "max" in any primary key value (case-insensitive)
+      const hasFilteredStrings = pkValues.some((val) => {
+        const lowerVal = val.toLowerCase();
+        return lowerVal.includes("uuid") || lowerVal.includes("max");
+      });
+
+      if (hasFilteredStrings) {
+        return; // Skip this row
       }
 
       // Create a unique key from primary key combination
@@ -55,17 +65,17 @@ export class QueryGenerationService {
         // Found duplicate - add to existing entry
         const existing = pkCombinations.get(pkKey);
         existing.rows.push(actualRowNumber);
-        
+
         // Add to duplicates array if this is the first time we detect this duplicate
         if (existing.rows.length === 2) {
           duplicates.push({
             pkValues: pkValues,
             pkFields: primaryKeys,
-            rows: [...existing.rows]
+            rows: [...existing.rows],
           });
         } else {
           // Update existing duplicate entry
-          const duplicateEntry = duplicates.find(d => d.pkValues.join("|") === pkKey);
+          const duplicateEntry = duplicates.find((d) => d.pkValues.join("|") === pkKey);
           if (duplicateEntry) {
             duplicateEntry.rows = [...existing.rows];
           }
@@ -74,7 +84,7 @@ export class QueryGenerationService {
         // First occurrence of this primary key combination
         pkCombinations.set(pkKey, {
           pkValues: pkValues,
-          rows: [actualRowNumber]
+          rows: [actualRowNumber],
         });
       }
     });
@@ -82,37 +92,40 @@ export class QueryGenerationService {
     // Generate warning message if duplicates found
     let warningMessage = null;
     if (duplicates.length > 0) {
-      const warningMessages = duplicates.map(duplicate => {
-        const pkDescription = duplicate.pkFields.length === 1 
-          ? `Primary key '${duplicate.pkFields[0]}'` 
-          : `Primary key combination (${duplicate.pkFields.join(", ")})`;
-        const valueDescription = duplicate.pkValues.length === 1
-          ? `value '${duplicate.pkValues[0]}'`
-          : `values (${duplicate.pkValues.join(", ")})`;
-        return `${pkDescription} with ${valueDescription} appears multiple times on rows: ${duplicate.rows.join(", ")}<br>`;
-      }).join("\n");
-      
+      const warningMessages = duplicates
+        .map((duplicate) => {
+          const pkDescription =
+            duplicate.pkFields.length === 1
+              ? `Primary key '${duplicate.pkFields[0]}'`
+              : `Primary key combination (${duplicate.pkFields.join(", ")})`;
+          const valueDescription =
+            duplicate.pkValues.length === 1 ? `value '${duplicate.pkValues[0]}'` : `values (${duplicate.pkValues.join(", ")})`;
+          return `${pkDescription} with ${valueDescription} appears multiple times on rows: ${duplicate.rows.join(", ")}<br>`;
+        })
+        .join("\n");
+
       warningMessage = `Warning: Duplicate primary keys detected:<br>${warningMessages}This may cause unexpected behavior.`;
     }
 
     return {
       hasDuplicates: duplicates.length > 0,
       duplicates: duplicates,
-      warningMessage: warningMessage
+      warningMessage: warningMessage,
     };
   }
 
   generateQuery(tableName, queryType, schemaData, inputData, attachments) {
     // 1. Get field names from first row of input data
-    const fieldNames = inputData[0].map((name) => name.toLowerCase());
-    console.log("Field names extracted");
+    const fieldNames = inputData[0].map((name) => name);
+    console.log("Field names extracted", fieldNames);
 
     // 2. Get data rows (excluding header row)
     const dataRows = inputData.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== ""));
     console.log("Data rows extracted");
 
     // 3. Map schema with field name as key
-    const schemaMap = new Map(schemaData.map((row) => [row[0].toLowerCase(), row]));
+    const schemaMap = new Map(schemaData.map((row) => [row[0], row]));
+    console.log("Schema Map:", schemaMap);
 
     // 4. Process each row of data
     const processedRows = dataRows.map((rowData, rowIndex) => {
@@ -120,7 +133,7 @@ export class QueryGenerationService {
         // For each field in the row
         return fieldNames.map((fieldName, colIndex) => {
           // Get the schema definition for this field
-          const schemaRow = schemaMap.get(fieldName.toLowerCase());
+          const schemaRow = schemaMap.get(fieldName);
 
           // Extract dataType and nullable from schema
           const [, dataType, nullable] = schemaRow;
@@ -221,32 +234,35 @@ export class QueryGenerationService {
   }
 
   generateUpdateStatement(tableName, processedRows, primaryKeys) {
-    const primaryKeysLowerCase = primaryKeys.map((pk) => pk.toLowerCase());
-    
+    // const primaryKeysLowerCase = primaryKeys.map((pk) => pk.toLowerCase());
+
     // Collect all unique fields being updated across all rows (table scope)
     const allUpdatedFields = new Set();
-    const pkValueMap = new Map(primaryKeysLowerCase.map((pk) => [pk, new Set()]));
-    
+    const pkValueMap = new Map(primaryKeys.map((pk) => [pk, new Set()]));
+
     // Process each row to collect updated fields and primary key values
     processedRows.forEach((row) => {
       row.forEach((field) => {
         // Collect primary key values for WHERE clause
-        if (primaryKeysLowerCase.includes(field.fieldName)) {
+        if (primaryKeys.includes(field.fieldName)) {
           if (field.formattedValue && field.formattedValue !== "NULL" && field.formattedValue !== null) {
             pkValueMap.get(field.fieldName).add(field.formattedValue);
           }
         }
         // Collect non-primary key fields that are being updated (excluding audit fields)
-        else if (!primaryKeysLowerCase.includes(field.fieldName) && 
-                 !["created_time", "created_by", "updated_time", "updated_by"].includes(field.fieldName) &&
-                 field.formattedValue !== null && field.formattedValue !== undefined) {
+        else if (
+          !primaryKeys.includes(field.fieldName) &&
+          !["created_time", "created_by", "updated_time", "updated_by"].includes(field.fieldName) &&
+          field.formattedValue !== null &&
+          field.formattedValue !== undefined
+        ) {
           allUpdatedFields.add(field.fieldName);
         }
       });
     });
 
     // Validate that we have primary key values
-    const hasValidPkValues = Array.from(pkValueMap.values()).some(valueSet => valueSet.size > 0);
+    const hasValidPkValues = Array.from(pkValueMap.values()).some((valueSet) => valueSet.size > 0);
     if (!hasValidPkValues) {
       throw new Error("Primary key values are required for UPDATE operation.");
     }
@@ -265,31 +281,31 @@ export class QueryGenerationService {
     processedRows.forEach((row) => {
       const updateFields = row
         .filter((f) => {
-          if (primaryKeysLowerCase.includes(f.fieldName)) return false;
+          if (primaryKeys.includes(f.fieldName)) return false;
           if (["created_time", "created_by"].includes(f.fieldName)) return false;
           if (f.formattedValue === null) return false;
           return f.formattedValue !== undefined;
         })
         .map((f) => `  ${this.formatFieldName(f.fieldName)} = ${f.formattedValue}`);
-      
+
       if (updateFields.length > 0) {
-        const pkConditions = primaryKeysLowerCase
+        const pkConditions = primaryKeys
           .map((pk) => {
-            const pkField = row.find(f => f.fieldName === pk);
+            const pkField = row.find((f) => f.fieldName === pk);
             if (!pkField || pkField.formattedValue === null || pkField.formattedValue === "NULL" || !pkField.formattedValue) {
               throw new Error(`Primary key '${pk}' in row ${processedRows.indexOf(row) + 2} must have a value for UPDATE operation.`);
             }
             return `${this.formatFieldName(pk)} = ${pkField.formattedValue}`;
           })
           .join(" AND ");
-        
+
         updateStatements.push(`UPDATE ${tableName}\nSET\n${updateFields.join(",\n")}\nWHERE ${pkConditions};`);
       }
     });
 
     // Create field list for SELECT statements (table scope)
-    const selectFieldNames = Array.from(allUpdatedFields).map(f => this.formatFieldName(f));
-    
+    const selectFieldNames = Array.from(allUpdatedFields).map((f) => this.formatFieldName(f));
+
     // Build WHERE clause for SELECT statements using IN clauses like generateSelectStatement
     const whereConditions = [];
     pkValueMap.forEach((values, pkName) => {
@@ -302,9 +318,9 @@ export class QueryGenerationService {
     // Generate the 3-part UPDATE statement
     let updateStatement = "-- Selected fields before update\n";
     updateStatement += `SELECT ${selectFieldNames.join(", ")}\nFROM ${tableName} WHERE ${allPkConditions};\n\n`;
-    
+
     updateStatement += updateStatements.join("\n\n") + "\n\n";
-    
+
     updateStatement += "-- Selected fields after update\n";
     updateStatement += `SELECT ${selectFieldNames.join(", ")}\nFROM ${tableName} WHERE ${allPkConditions};`;
 
@@ -316,7 +332,7 @@ export class QueryGenerationService {
     if (processedRows.length === 0) return null;
 
     // Collect formatted values for each primary key
-    const pkValueMap = new Map(primaryKeys.map((pk) => [pk.toLowerCase(), new Set()]));
+    const pkValueMap = new Map(primaryKeys.map((pk) => [pk, new Set()]));
 
     // Go through each processed row to collect PK values
     processedRows.forEach((row) => {
@@ -351,7 +367,10 @@ export class QueryGenerationService {
   }
 
   formatFieldName(fieldName) {
-    return oracleReservedWords.has(fieldName.toLowerCase()) ? `"${fieldName.toLowerCase()}"` : fieldName;
+    if (fieldName === fieldName.toLowerCase()) {
+      return oracleReservedWords.has(fieldName.toLowerCase()) ? `"${fieldName.toLowerCase()}"` : fieldName;
+    }
+    return fieldName.toLowerCase();
   }
 
   getMaxLength(dataType) {

@@ -13,21 +13,21 @@ export class ValueProcessorService {
     };
 
     // Handle audit fields
-    if (AUDIT_FIELDS.time.includes(fieldName)) {
+    if (AUDIT_FIELDS.time.includes(fieldName.toLowerCase())) {
       // const hasNoValue = !value;
       // const hasNoTimestampCharacters = !/[-/]/.test(value);
       // return hasNoValue || hasNoTimestampCharacters ? "SYSDATE" : this.formatTimestamp(value);
       return "SYSDATE"; // for data integrity, return sysdate to log the time of the query
     }
 
-    if (AUDIT_FIELDS.by.includes(fieldName)) {
+    if (AUDIT_FIELDS.by.includes(fieldName.toLowerCase())) {
       return value?.trim() ? `'${value.replace(/'/g, "''").toUpperCase()}'` : "'SYSTEM'";
     }
 
     // Handle NULL values
     const isEmptyValue = value === null || value === undefined || value === "";
     const isExplicitNull = value?.toLowerCase() === "null";
-    
+
     if (isEmptyValue) {
       // For UPDATE operations, skip empty values (don't update these fields)
       if (queryType === "update") {
@@ -39,7 +39,7 @@ export class ValueProcessorService {
       }
       return "NULL";
     }
-    
+
     // Handle explicit NULL string values
     if (isExplicitNull) {
       // Always validate nullable constraint for explicit NULL values
@@ -211,7 +211,7 @@ export class ValueProcessorService {
     if (pkFields.length > 0) return pkFields;
 
     // If no primary keys found, use the first field as default
-    return [data[0][0].toLowerCase()];
+    return [data[0][0]];
   }
 
   isValidUUID(str) {

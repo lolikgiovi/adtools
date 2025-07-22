@@ -386,15 +386,18 @@ export class QuickQueryUI {
         throw new Error("Table name format should be 'schema_name.table_name'.");
       }
 
+      if (schemaData.length === 0) {
+        throw new Error("Please fill the schema data first");
+      }
+
       if (isDbeaverSchema(schemaData)) {
         this.adjustDbeaverSchema(schemaData);
+
         throw new Error("Schema data adjusted from DBeaver to SQL Developer format. Please refill the data sheet.");
       }
 
       this.schemaValidationService.validateSchema(schemaData);
       this.schemaValidationService.matchSchemaWithData(schemaData, inputData);
-
-      
 
       this.localStorageService.saveSchema(tableName, schemaData, inputData);
 
@@ -995,6 +998,7 @@ export class QuickQueryUI {
     if (this.schemaTable && typeof this.schemaTable.loadData === "function") {
       try {
         // Clear existing data and load new data
+        this.handleClearData();
         this.schemaTable.loadData(adjustedSchemaData);
         this.updateDataSpreadsheet();
       } catch (error) {
