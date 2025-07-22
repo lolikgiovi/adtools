@@ -5,6 +5,7 @@ export const MAIN_TEMPLATE = `<div class="tool-container quick-query-tool-contai
                 <div class="button-group">
                     <select id="queryTypeSelect">
                         <option value="merge">MERGE INTO</option>
+                        <option value="insert">INSERT</option>
                         <option value="update">UPDATE</option>
                     </select>
                     <input type="text" id="tableNameInput" placeholder="schema_name.table_name"
