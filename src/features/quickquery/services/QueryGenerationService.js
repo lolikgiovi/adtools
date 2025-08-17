@@ -216,13 +216,14 @@ export class QueryGenerationService {
 
     // Format UPDATE SET clause (excluding PKs and creation fields)
     const updateFields = processedFields
-      .filter((f) => !primaryKeysLowerCase.includes(f.fieldName) && !["created_time", "created_by"].includes(f.fieldName))
+      .filter((f) => !primaryKeysLowerCase.includes(f.fieldName.toLowerCase()) && !["created_time", "created_by"].includes(f.fieldName.toLowerCase()))
       .map((f) => `  tgt.${this.formatFieldName(f.fieldName)} = src.${this.formatFieldName(f.fieldName)}`)
       .join(",\n");
 
-    // Format INSERT fields and values
-    const insertFields = processedFields.map((f) => this.formatFieldName(f.fieldName)).join(", ");
-    const insertValues = processedFields.map((f) => `src.${this.formatFieldName(f.fieldName)}`).join(", ");
+    // Format INSERT fields and values (excluding primary keys as per Oracle SQL conventions)
+    const nonPkFields = processedFields.filter((f) => !primaryKeysLowerCase.includes(f.fieldName.toLowerCase()));
+    const insertFields = nonPkFields.map((f) => this.formatFieldName(f.fieldName)).join(", ");
+    const insertValues = nonPkFields.map((f) => `src.${this.formatFieldName(f.fieldName)}`).join(", ");
 
     let mergeStatement = `MERGE INTO ${tableName} tgt`;
     mergeStatement += `\nUSING (SELECT${selectFields}\n  FROM DUAL) src`;
