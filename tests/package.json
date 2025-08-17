@@ -1,0 +1,10 @@
+{
+  "type": "module",
+  "name": "adtools-tests",
+  "version": "1.0.0",
+  "description": "Dynamic execution tests for QueryGenerationService",
+  "scripts": {
+    "test": "node run-tests-dynamic.js",
+    "test:static": "node run-tests.js"
+  }
+}

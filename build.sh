@@ -1,12 +1,21 @@
 #!/bin/bash
 
 # Run tests before building
-echo "🧪 Running tests..."
+echo "🧪 Running static validation tests..."
 node tests/run-tests.js
 
-# Check if tests passed
+# Check if static tests passed
 if [ $? -ne 0 ]; then
-    echo "❌ Tests failed! Build aborted."
+    echo "❌ Static validation tests failed! Build aborted."
+    exit 1
+fi
+
+echo "🧪 Running dynamic execution tests..."
+node tests/run-tests-dynamic.js
+
+# Check if dynamic tests passed
+if [ $? -ne 0 ]; then
+    echo "❌ Dynamic execution tests failed! Build aborted."
     exit 1
 fi
 
