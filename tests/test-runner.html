@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QueryGenerationService Unit Tests</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007acc;
+            padding-bottom: 10px;
+        }
+        .test-info {
+            background: #e8f4fd;
+            border-left: 4px solid #007acc;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .test-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            margin: 20px 0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .run-button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .run-button:hover {
+            background: #005a9e;
+        }
+        .run-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.running {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .test-description {
+            margin: 20px 0;
+            line-height: 1.6;
+        }
+        .test-description h3 {
+            color: #007acc;
+            margin-top: 25px;
+        }
+        .test-description ul {
+            padding-left: 20px;
+        }
+        .test-description li {
+            margin: 8px 0;
+        }
+        code {
+            background: #f1f1f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 QueryGenerationService Unit Tests</h1>
+        
+        <div class="test-info">
+            <strong>Purpose:</strong> This test suite validates the QueryGenerationService's merge query generation functionality, 
+            specifically ensuring that primary keys are correctly excluded from UPDATE and INSERT statements within MERGE queries.
+        </div>
+
+        <div class="test-description">
+            <h3>🎯 Test Coverage</h3>
+            <ul>
+                <li><strong>Basic Merge Query Generation:</strong> Validates that MERGE statements are properly structured</li>
+                <li><strong>Primary Key Exclusion in INSERT:</strong> Ensures PKs are excluded from INSERT field lists</li>
+                <li><strong>Primary Key Exclusion in UPDATE:</strong> Ensures PKs are not updated in WHEN MATCHED clause</li>
+                <li><strong>Multiple Primary Keys:</strong> Tests composite primary key handling</li>
+                <li><strong>Audit Fields:</strong> Validates creation/update timestamp handling</li>
+                <li><strong>Config Tables:</strong> Tests special handling for configuration tables</li>
+                <li><strong>INSERT vs MERGE:</strong> Ensures INSERT queries include primary keys (different behavior)</li>
+                <li><strong>Edge Cases:</strong> Handles tables without explicit primary keys</li>
+            </ul>
+
+            <h3>🔍 Key Validation Points</h3>
+            <ul>
+                <li>MERGE queries exclude primary keys from <code>INSERT (field_list)</code></li>
+                <li>MERGE queries exclude primary keys from <code>UPDATE SET</code> clauses</li>
+                <li>Primary keys are used in <code>ON (join_condition)</code> clauses</li>
+                <li>INSERT queries include all fields including primary keys</li>
+                <li>Audit fields like <code>created_time</code> are handled appropriately</li>
+            </ul>
+        </div>
+
+        <button id="runTests" class="run-button">▶️ Run Tests</button>
+        
+        <div id="status"></div>
+        <div id="output" class="test-output"></div>
+    </div>
+
+    <script type="module">
+        // Mock the dependencies that would normally be imported
+        window.mockDependencies = {
+            ValueProcessorService: class {
+                findPrimaryKeys(schemaData, tableName) {
+                    console.log("Finding primary keys for:", tableName);
+                    
+                    // For config table, use field parameter_key if exist as primary key
+                    if (tableName.toLowerCase().endsWith("config")) {
+                        const parameterKeyField = schemaData.find((field) => field[0].toLowerCase() === "parameter_key");
+                        if (parameterKeyField) return [parameterKeyField[0].toLowerCase()];
+                    }
+                    
+                    // Look for fields with "PK" or "pk" in the Nullable field
+                    const pkFields = schemaData.filter((field) => field[2].toLowerCase().includes("pk")).map((field) => field[0]);
+                    
+                    if (pkFields.length > 0) return pkFields;
+                    
+                    // If no primary keys found, use the first field as default
+                    return [schemaData[0][0]];
+                }
+                
+                processValue(value, dataType, nullable, fieldName, tableName, queryType) {
+                    // Simplified value processing for testing
+                    if (fieldName.toLowerCase().includes('time')) {
+                        return 'SYSDATE';
+                    }
+                    if (typeof value === 'string') {
+                        return `'${value}'`;
+                    }
+                    return value;
+                }
+            },
+            
+            AttachmentValidationService: class {
+                validateAttachment() {
+                    return null; // No attachments for testing
+                }
+            },
+            
+            oracleReservedWords: new Set(['user', 'table', 'select', 'from', 'where'])
+        };
+
+        // Import and run the test
+        document.getElementById('runTests').addEventListener('click', async () => {
+            const button = document.getElementById('runTests');
+            const status = document.getElementById('status');
+            const output = document.getElementById('output');
+            
+            button.disabled = true;
+            status.innerHTML = '<div class="status running">🔄 Running tests...</div>';
+            output.textContent = '';
+            
+            // Capture console output
+            const originalLog = console.log;
+            let testOutput = '';
+            console.log = (...args) => {
+                testOutput += args.join(' ') + '\n';
+                output.textContent = testOutput;
+            };
+            
+            try {
+                // Load and run the test
+                const module = await import('./QueryGenerationService.test.js');
+                const success = await module.runner.run();
+                
+                if (success) {
+                    status.innerHTML = '<div class="status success">✅ All tests passed!</div>';
+                } else {
+                    status.innerHTML = '<div class="status error">❌ Some tests failed. Check output for details.</div>';
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="status error">❌ Error running tests: ${error.message}</div>`;
+                console.log(`Error: ${error.message}`);
+                console.log(error.stack);
+            } finally {
+                console.log = originalLog;
+                button.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
