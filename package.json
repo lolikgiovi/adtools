@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "name": "adtools",
+  "version": "1.0.0",
+  "description": "AD Tools - Development utilities and query generation tools"
+}
