@@ -99,6 +99,27 @@ const multiPkInputData = [
 
 const attachments = []; // Empty attachments for testing
 
+// Test data with Oracle reserved words (lowercase and uppercase)
+const reservedWordSchema = [
+  ['id', 'NUMBER(10)', 'PK'],
+  ['sequence', 'NUMBER(10)', 'NO'],    // Oracle reserved word (lowercase - should be quoted)
+  ['select', 'VARCHAR2(50)', 'NO'],     // Oracle reserved word (lowercase - should be quoted)
+  ['from', 'VARCHAR2(100)', 'YES'],     // Oracle reserved word (lowercase - should be quoted)
+  ['where', 'VARCHAR2(200)', 'NO'],     // Oracle reserved word (lowercase - should be quoted)
+  ['order', 'VARCHAR2(50)', 'NO'],      // Oracle reserved word (lowercase - should be quoted)
+  ['SEQUENCE', 'NUMBER(10)', 'NO'],     // Oracle reserved word (uppercase - should NOT be quoted)
+  ['SELECT', 'VARCHAR2(50)', 'NO'],     // Oracle reserved word (uppercase - should NOT be quoted)
+  ['FROM', 'VARCHAR2(100)', 'YES'],     // Oracle reserved word (uppercase - should NOT be quoted)
+  ['WHERE', 'VARCHAR2(200)', 'NO'],     // Oracle reserved word (uppercase - should NOT be quoted)
+  ['ORDER', 'VARCHAR2(50)', 'NO']       // Oracle reserved word (uppercase - should NOT be quoted)
+];
+
+const reservedWordInputData = [
+  ['id', 'sequence', 'select', 'from', 'where', 'order', 'SEQUENCE', 'SELECT', 'FROM', 'WHERE', 'ORDER'],
+  ['1', '100', 'test_select', 'test_from', 'test_where', 'test_order', '200', 'TEST_SELECT', 'TEST_FROM', 'TEST_WHERE', 'TEST_ORDER'],
+  ['2', '300', 'another_select', 'another_from', 'another_where', 'another_order', '400', 'ANOTHER_SELECT', 'ANOTHER_FROM', 'ANOTHER_WHERE', 'ANOTHER_ORDER']
+];
+
 // Test suite
 const runner = new TestRunner();
 
@@ -108,7 +129,7 @@ runner.test('QueryGenerationService can be instantiated', () => {
   assert(typeof service.generateMergeStatement === 'function', 'Should have generateMergeStatement method');
 });
 
-runner.test('generateQuery with merge excludes primary keys from INSERT clause', () => {
+runner.test('generateQuery with merge includes primary keys in INSERT clause', () => {
   const service = new QueryGenerationService();
   
   // Generate merge statement
@@ -118,10 +139,11 @@ runner.test('generateQuery with merge excludes primary keys from INSERT clause',
   console.log(mergeSQL);
   console.log('--- End SQL ---\n');
   
-  // Verify primary keys are NOT in INSERT clause
+  // Verify primary keys ARE in INSERT clause (all fields should be inserted for new records)
   assertContains(mergeSQL, 'INSERT (', 'Should contain INSERT clause');
-  assertNotContains(mergeSQL, 'INSERT (user_id', 'Primary key user_id should NOT be in INSERT fields');
-  assertContains(mergeSQL, 'INSERT (username, email', 'Non-primary key fields should be in INSERT');
+  assertContains(mergeSQL, 'user_id', 'Primary key user_id SHOULD be in INSERT fields');
+  assertContains(mergeSQL, 'username', 'Non-primary key fields should be in INSERT');
+  assertContains(mergeSQL, 'email', 'Non-primary key fields should be in INSERT');
 });
 
 runner.test('generateQuery with merge excludes primary keys from UPDATE clause', () => {
@@ -166,9 +188,9 @@ runner.test('generateQuery with merge handles multiple primary keys correctly', 
   assertContains(mergeSQL, 'tgt.tenant_id = src.tenant_id', 'Should include tenant_id in ON clause');
   assertContains(mergeSQL, 'tgt.user_id = src.user_id', 'Should include user_id in ON clause');
   
-  // Should not include primary keys in INSERT clause
-  assertNotContains(mergeSQL, 'INSERT (tenant_id', 'tenant_id should NOT be in INSERT fields');
-  assertNotContains(mergeSQL, 'INSERT (user_id', 'user_id should NOT be in INSERT fields');
+  // Should include primary keys in INSERT clause (all fields needed for new records)
+  assertContains(mergeSQL, 'tenant_id', 'tenant_id SHOULD be in INSERT fields');
+  assertContains(mergeSQL, 'user_id', 'user_id SHOULD be in INSERT fields');
   
   // Should not include primary keys in UPDATE SET clause
   assertNotContains(updateSetSection, 'tgt.tenant_id =', 'tenant_id should NOT be in UPDATE SET');
@@ -198,6 +220,94 @@ runner.test('Oracle reserved words are handled correctly', () => {
   // Test with a normal field
   const normalField = service.formatFieldName('username');
   assertNotContains(normalField, '"', 'Normal fields should not be quoted');
+});
+
+runner.test('Oracle reserved words are properly quoted in MERGE statement', () => {
+  const service = new QueryGenerationService();
+  
+  const mergeSQL = service.generateQuery('test_table', 'merge', reservedWordSchema, reservedWordInputData, attachments);
+  
+  console.log('\n--- MERGE SQL with Reserved Words ---');
+  console.log(mergeSQL);
+  console.log('--- End SQL ---\n');
+  
+  // Verify lowercase reserved words are quoted
+  assertContains(mergeSQL, '"sequence"', 'lowercase sequence should be quoted as "sequence"');
+  assertContains(mergeSQL, '"select"', 'lowercase select should be quoted as "select"');
+  assertContains(mergeSQL, '"from"', 'lowercase from should be quoted as "from"');
+  assertContains(mergeSQL, '"where"', 'lowercase where should be quoted as "where"');
+  assertContains(mergeSQL, '"order"', 'lowercase order should be quoted as "order"');
+  
+  // Verify uppercase reserved words are NOT quoted (treated as normal field names)
+  assertNotContains(mergeSQL, '"SEQUENCE"', 'uppercase SEQUENCE should NOT be quoted');
+  assertNotContains(mergeSQL, '"SELECT"', 'uppercase SELECT should NOT be quoted');
+  assertNotContains(mergeSQL, '"FROM"', 'uppercase FROM should NOT be quoted');
+  assertNotContains(mergeSQL, '"WHERE"', 'uppercase WHERE should NOT be quoted');
+  assertNotContains(mergeSQL, '"ORDER"', 'uppercase ORDER should NOT be quoted');
+  
+  // Verify non-reserved words are not quoted
+  assertNotContains(mergeSQL, '"id"', 'Non-reserved word id should not be quoted');
+  
+  // Verify uppercase reserved words appear as unquoted lowercase field names
+  assertContains(mergeSQL, ' sequence', 'uppercase SEQUENCE should appear as unquoted lowercase sequence');
+  assertNotContains(mergeSQL, '"SEQUENCE"', 'uppercase SEQUENCE should NOT appear quoted');
+});
+
+runner.test('Reserved words are quoted in INSERT clause', () => {
+  const service = new QueryGenerationService();
+  
+  const mergeSQL = service.generateQuery('test_table', 'merge', reservedWordSchema, reservedWordInputData, attachments);
+  
+  // Check INSERT clause specifically
+  const insertMatch = mergeSQL.match(/INSERT \(([^)]+)\)/);
+  const insertClause = insertMatch ? insertMatch[1] : '';
+  
+  // Lowercase reserved words should be quoted
+  assertContains(insertClause, '"sequence"', 'lowercase sequence should be quoted in INSERT clause');
+  assertContains(insertClause, '"select"', 'lowercase select should be quoted in INSERT clause');
+  assertContains(insertClause, '"from"', 'lowercase from should be quoted in INSERT clause');
+  
+  // Uppercase reserved words should NOT be quoted (they appear as lowercase unquoted)
+  assertNotContains(insertClause, '"SEQUENCE"', 'uppercase SEQUENCE should NOT be quoted in INSERT clause');
+  assertContains(insertClause, 'sequence', 'uppercase SEQUENCE should appear as unquoted lowercase sequence in INSERT clause');
+});
+
+runner.test('Reserved words are quoted in UPDATE SET clause', () => {
+  const service = new QueryGenerationService();
+  
+  const mergeSQL = service.generateQuery('test_table', 'merge', reservedWordSchema, reservedWordInputData, attachments);
+  
+  // Extract UPDATE SET section
+  const updateSetMatch = mergeSQL.match(/UPDATE SET([\s\S]*?)WHEN NOT MATCHED/);
+  const updateSetSection = updateSetMatch ? updateSetMatch[1] : '';
+  
+  // Lowercase reserved words should be quoted
+  assertContains(updateSetSection, 'tgt."sequence" = src."sequence"', 'lowercase sequence should be quoted in UPDATE SET');
+  assertContains(updateSetSection, 'tgt."select" = src."select"', 'lowercase select should be quoted in UPDATE SET');
+  assertContains(updateSetSection, 'tgt."from" = src."from"', 'lowercase from should be quoted in UPDATE SET');
+  
+  // Uppercase reserved words should NOT be quoted (they appear as lowercase unquoted)
+  assertContains(updateSetSection, 'tgt.sequence = src.sequence', 'uppercase SEQUENCE should appear as unquoted lowercase sequence in UPDATE SET');
+  assertNotContains(updateSetSection, 'tgt."SEQUENCE"', 'uppercase SEQUENCE should NOT be quoted in UPDATE SET');
+});
+
+runner.test('Reserved words are quoted in VALUES clause', () => {
+  const service = new QueryGenerationService();
+  
+  const mergeSQL = service.generateQuery('test_table', 'merge', reservedWordSchema, reservedWordInputData, attachments);
+  
+  // Check VALUES clause
+  const valuesMatch = mergeSQL.match(/VALUES \(([^)]+)\)/);
+  const valuesClause = valuesMatch ? valuesMatch[1] : '';
+  
+  // Lowercase reserved words should be quoted
+  assertContains(valuesClause, 'src."sequence"', 'lowercase sequence should be quoted in VALUES clause');
+  assertContains(valuesClause, 'src."select"', 'lowercase select should be quoted in VALUES clause');
+  assertContains(valuesClause, 'src."from"', 'lowercase from should be quoted in VALUES clause');
+  
+  // Uppercase reserved words should NOT be quoted (they appear as lowercase unquoted)
+  assertContains(valuesClause, 'src.sequence', 'uppercase SEQUENCE should appear as unquoted lowercase sequence in VALUES clause');
+  assertNotContains(valuesClause, 'src."SEQUENCE"', 'uppercase SEQUENCE should NOT be quoted in VALUES clause');
 });
 
 runner.test('Generated SQL structure is valid', () => {
