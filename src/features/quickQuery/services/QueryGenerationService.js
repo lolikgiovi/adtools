@@ -16,14 +16,14 @@ export class QueryGenerationService {
     }
 
     // 2. Get field names from first row of input data
-    const fieldNames = inputData[0].map((name) => name.toLowerCase());
+    const fieldNames = inputData[0].map((name) => name);
 
     // 3. Get data rows (excluding header row)
     const dataRows = inputData.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== ""));
 
     // 4. Find indices of primary key columns
     const pkIndices = primaryKeys.map((pk) => {
-      const index = fieldNames.indexOf(pk.toLowerCase());
+      const index = fieldNames.indexOf(pk);
       if (index === -1) {
         throw new Error(`Primary key field '${pk}' not found in data columns`);
       }
@@ -210,20 +210,21 @@ export class QueryGenerationService {
     const selectFields = processedFields.map((f) => `\n  ${f.formattedValue} AS ${this.formatFieldName(f.fieldName)}`).join(",");
 
     // Format ON conditions for primary keys
-    const pkConditions = primaryKeysLowerCase
+    const pkConditions = primaryKeys
       .map((pk) => `tgt.${this.formatFieldName(pk).toLowerCase()} = src.${this.formatFieldName(pk).toLowerCase()}`)
       .join(" AND ");
 
     // Format UPDATE SET clause (excluding PKs and creation fields)
     const updateFields = processedFields
-      .filter((f) => !primaryKeysLowerCase.includes(f.fieldName.toLowerCase()) && !["created_time", "created_by"].includes(f.fieldName.toLowerCase()))
+      .filter(
+        (f) => !primaryKeys.includes(f.fieldName.toLowerCase()) && !["created_time", "created_by"].includes(f.fieldName.toLowerCase())
+      )
       .map((f) => `  tgt.${this.formatFieldName(f.fieldName)} = src.${this.formatFieldName(f.fieldName)}`)
       .join(",\n");
 
     // Format INSERT fields and values (excluding primary keys as per Oracle SQL conventions)
-    const nonPkFields = processedFields.filter((f) => !primaryKeysLowerCase.includes(f.fieldName.toLowerCase()));
-    const insertFields = nonPkFields.map((f) => this.formatFieldName(f.fieldName)).join(", ");
-    const insertValues = nonPkFields.map((f) => `src.${this.formatFieldName(f.fieldName)}`).join(", ");
+    const insertFields = processedFields.map((f) => this.formatFieldName(f.fieldName)).join(", ");
+    const insertValues = processedFields.map((f) => `src.${this.formatFieldName(f.fieldName)}`).join(", ");
 
     let mergeStatement = `MERGE INTO ${tableName} tgt`;
     mergeStatement += `\nUSING (SELECT${selectFields}\n  FROM DUAL) src`;
